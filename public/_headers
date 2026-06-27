@@ -1,0 +1,10 @@
+# https://developers.cloudflare.com/pages/platform/headers/
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  X-Frame-Options: DENY
+
+/build/*
+  Cache-Control: max-age=31536000, s-maxage=31536000, immutable, stale-while-revalidate

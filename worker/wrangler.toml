@@ -1,0 +1,12 @@
+name = "dispomail-forwarder"
+main = "src/index.js"
+compatibility_date = "2023-12-01"
+
+# Runtime env values expected by this worker:
+# WEBHOOK_URL=https://<your-app>.netlify.app/api/webhook
+# WEBHOOK_SECRET=<shared secret, must match app>
+# FORWARD_DOMAINS=yourdomain1.com,yourdomain2.com
+# FORWARD_EMAIL=
+
+# Bindings to allow no-op for simple email workers
+# but required for email syntax

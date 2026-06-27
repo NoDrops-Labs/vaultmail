@@ -1,0 +1,79 @@
+import { NextResponse } from 'next/server';
+import { inboxPattern } from '@/lib/storage-keys';
+import { storage } from '@/lib/storage';
+import { requireAdminRequest } from '@/lib/admin-request';
+
+type InboxEmail = {
+  receivedAt?: string;
+};
+
+type AdminStats = {
+  inboxCount: number;
+  messageCount: number;
+  latestReceivedAt: string | null;
+};
+
+const parseEmail = (value: unknown): InboxEmail | null => {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as InboxEmail;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value === 'object') {
+    return value as InboxEmail;
+  }
+  return null;
+};
+
+export async function GET(req: Request) {
+  const guard = await requireAdminRequest(req);
+  if (!guard.ok) {
+    if (guard.status === 401) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }
+    return NextResponse.json({ error: 'Forbidden', reason: guard.reason }, { status: 403 });
+  }
+
+  const keys = (await storage.keys(inboxPattern())) ?? [];
+  const inboxCount = keys.length;
+
+  if (!keys.length) {
+    const emptyStats: AdminStats = {
+      inboxCount: 0,
+      messageCount: 0,
+      latestReceivedAt: null
+    };
+    return NextResponse.json(emptyStats);
+  }
+
+  const counts = await Promise.all(keys.map((key) => storage.llen(key)));
+  const messageCount = counts.reduce((total, count) => total + count, 0);
+
+  const latestItems = await Promise.all(
+    keys.map((key) => storage.lrange(key, 0, 0))
+  );
+  let latestTimestamp: number | null = null;
+
+  latestItems.forEach((items) => {
+    const firstItem = Array.isArray(items) ? items[0] : null;
+    const parsed = parseEmail(firstItem);
+    if (!parsed?.receivedAt) return;
+    const timestamp = new Date(parsed.receivedAt).getTime();
+    if (!Number.isNaN(timestamp)) {
+      if (latestTimestamp === null || timestamp > latestTimestamp) {
+        latestTimestamp = timestamp;
+      }
+    }
+  });
+
+  const stats: AdminStats = {
+    inboxCount,
+    messageCount,
+    latestReceivedAt: latestTimestamp ? new Date(latestTimestamp).toISOString() : null
+  };
+
+  return NextResponse.json(stats);
+}

@@ -1,0 +1,35 @@
+name: Deploy Cloudflare Worker
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'worker/**'
+      - '.github/workflows/worker-deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy worker
+        uses: cloudflare/wrangler-action@v3
+        env:
+          WRANGLER_DISABLE_UPDATE_CHECK: "true"
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: >-
+            deploy
+            --var WEBHOOK_URL:${{ secrets.WEBHOOK_URL }}
+            --var WEBHOOK_SECRET:${{ secrets.WEBHOOK_SECRET }}
+            --var FORWARD_DOMAINS:${{ secrets.FORWARD_DOMAINS }}
+            --var FORWARD_EMAIL:${{ secrets.FORWARD_EMAIL }}
