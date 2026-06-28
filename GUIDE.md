@@ -102,11 +102,15 @@ The worker receives inbound emails from Cloudflare Email Routing and forwards th
 
 ### Step 1: Deploy Worker
 
+Deploy the inbound email Worker. Make sure it is the **only** `email()` handler and has no `fetch()` handler, otherwise it will not appear in the Email Routing "Send to a Worker" dropdown.
+
 ```bash
 cd worker
 npm install
 npx wrangler deploy
 ```
+
+After deploying, verify the Worker appears in **Cloudflare Dashboard** → **Compute** → **Workers & Pages** and has the name `dispomail-forwarder`.
 
 ### Step 2: Set Worker Secrets
 
@@ -136,15 +140,24 @@ npx wrangler secret put FORWARD_EMAIL
 
 For each domain you want to receive email on:
 
-1. Cloudflare Dashboard → your domain → Email → Email Routing
-2. Click **Enable Email Routing**
-3. Go to **Routes** tab
-4. Add **Catch-all** route:
-   - Action: **Send to Worker**
-   - Destination: **dispomail-forwarder**
-5. Save
+1. Cloudflare Dashboard → **Compute** → **Email Service** → **Email Routing**
+2. Select your domain and click **Enable Email Routing** (or **Onboard Domain** if not yet enabled)
+3. Go to the **Routing Rules** tab
+4. Click **Create routing rule** (or edit the existing **Catch-all** rule)
+5. Set:
+   - Email pattern: **Catch-all address**
+   - Action: **Send to a Worker**
+   - Destination: **`dispomail-forwarder`**
+6. Click **Save**
 
 Repeat for each domain.
+
+**If the dropdown says "No deployed Email Workers found":**
+- Make sure you deployed the Worker with `npx wrangler deploy` from the `worker/` directory
+- Make sure `worker/src/index.js` only exports an `email()` handler and no `fetch()` handler
+- Try refreshing the page or waiting a minute for the dashboard to sync
+- Confirm the Worker name in `worker/wrangler.toml` matches the name shown in the dropdown
+- If it still does not appear, try creating the rule directly from **Email Service** → **Email Routing** → **Routing Rules** after the domain is onboarded
 
 ### Step 4: Test Real Email
 
@@ -313,8 +326,15 @@ npm run build    # turbopack build
 
 ### Worker not receiving emails
 - Verify Cloudflare Email Routing is enabled for the domain
-- Check catch-all route points to `dispomail-forwarder` worker
+- Check catch-all route points to `dispomail-forwarder`
 - Check worker logs: `npx wrangler tail`
+
+### "No deployed Email Workers found" in the routing rule dropdown
+- Confirm the Worker was deployed with `npx wrangler deploy` from the `worker/` directory
+- Confirm `worker/src/index.js` only exports an `email()` handler (no `fetch()` handler)
+- Confirm the Worker name in `worker/wrangler.toml` is `dispomail-forwarder`
+- Refresh the Cloudflare dashboard page after deploying
+- Make sure the domain is fully onboarded in **Email Service** → **Email Routing** before creating the rule
 
 ---
 

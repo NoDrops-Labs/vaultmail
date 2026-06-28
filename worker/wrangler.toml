@@ -1,6 +1,6 @@
 name = "dispomail-forwarder"
 main = "src/index.js"
-compatibility_date = "2023-12-01"
+compatibility_date = "2025-01-01"
 
 # Runtime env values expected by this worker:
 # WEBHOOK_URL=https://<your-app>.netlify.app/api/webhook
