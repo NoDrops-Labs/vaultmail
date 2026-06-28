@@ -55,7 +55,7 @@ Note: Netlify auto-detects Next.js 16 and uses the Next.js Runtime automatically
 
 ### Step 3: Set Environment Variables
 
-Go to Site settings → Environment variables. Add each with scope **Functions** (and **Builds** for NEXT_PUBLIC_ vars):
+Go to Site settings → Environment variables. Add each with scope **Functions** (and **Builds** for `NEXT_PUBLIC_` vars):
 
 | Variable | Scope | Value | Required |
 |----------|-------|-------|----------|
@@ -64,16 +64,23 @@ Go to Site settings → Environment variables. Add each with scope **Functions**
 | `ADMIN_PASSWORD` | Functions | `<strong password>` | Yes |
 | `WEBHOOK_SECRET` | Functions | `<random 32-char string>` | Yes |
 | `CRON_SECRET` | Functions | `<random string>` | Recommended |
+| `NEXT_PUBLIC_APP_URL` | Builds | `https://<your-app>.netlify.app` | Recommended |
+| `NEXT_PUBLIC_DEFAULT_LOCALE` | Builds | `en` or `id` | Optional |
+| `NEXT_PUBLIC_ADSENSE_CLIENT_ID` | Builds | `<AdSense client ID>` | Optional |
 | `ATTACHMENT_MAX_BYTES` | Functions | `2000000` | Optional |
-| `TURNSTILE_SITE_KEY` | Both | `<from Cloudflare>` | Optional |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Both | `<same as above>` | Optional |
+| `TURNSTILE_SITE_KEY` | Functions | `<from Cloudflare>` | Optional |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Builds | `<same as above>` | Optional |
 | `TURNSTILE_SECRET_KEY` | Functions | `<from Cloudflare>` | Optional |
+
+**Do NOT add the following Worker-only variables to Netlify** — they belong in the Cloudflare Worker (see Phase 3): `WEBHOOK_URL`, `FORWARD_DOMAINS`, `FORWARD_EMAIL`.
 
 Generate secrets:
 ```bash
 openssl rand -hex 16   # WEBHOOK_SECRET
 openssl rand -hex 16   # CRON_SECRET
 ```
+
+**Local development only:** set `ALLOW_UNAUTHENTICATED_WEBHOOK=true` in `.env.local` so the webhook works without the shared secret. Never enable this in production.
 
 ### Step 4: Deploy
 
@@ -102,7 +109,11 @@ npx wrangler deploy
 
 ### Step 2: Set Worker Secrets
 
+Set these from inside the `worker/` directory. These are **worker-only** and are NOT added to Netlify.
+
 ```bash
+cd worker
+
 # The webhook URL (your Netlify app)
 npx wrangler secret put WEBHOOK_URL
 # Enter: https://<site-name>.netlify.app/api/webhook
@@ -111,7 +122,7 @@ npx wrangler secret put WEBHOOK_URL
 npx wrangler secret put WEBHOOK_SECRET
 # Enter: <same value as Netlify env>
 
-# Domains to accept email for
+# Domains to accept email for (comma-separated, no spaces)
 npx wrangler secret put FORWARD_DOMAINS
 # Enter: yourdomain.com,other.com
 
@@ -186,11 +197,12 @@ cd vaultmail && npm install
 
 # Configure
 cp .env.example .env.local
-# Edit .env.local:
+# Edit .env.local (minimum for local dev):
 #   MONGODB_URI=mongodb://localhost:27017
 #   MONGODB_DB=vaultmail
 #   ADMIN_PASSWORD=dev-admin-password
 #   ALLOW_UNAUTHENTICATED_WEBHOOK=true
+#   NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Run
 npm run dev
