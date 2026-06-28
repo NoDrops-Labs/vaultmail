@@ -52,15 +52,17 @@ jobs:
         working-directory: worker
         env:
           WRANGLER_DISABLE_UPDATE_CHECK: "true"
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          FORWARD_DOMAINS: ${{ secrets.FORWARD_DOMAINS }}
+          FORWARD_EMAIL: ${{ secrets.FORWARD_EMAIL }}
         run: >-
           npx wrangler@4 deploy
-          --account-id ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          --var "WEBHOOK_URL:${{ secrets.WEBHOOK_URL }}"
-          --var "FORWARD_DOMAINS:${{ secrets.FORWARD_DOMAINS }}"
-          --var "FORWARD_EMAIL:${{ secrets.FORWARD_EMAIL }}"
+          --var "WEBHOOK_URL:$WEBHOOK_URL"
+          --var "FORWARD_DOMAINS:$FORWARD_DOMAINS"
+          --var "FORWARD_EMAIL:$FORWARD_EMAIL"
 
       - name: Set WEBHOOK_SECRET
         working-directory: worker
         env:
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
-        run: printf "%s" "$WEBHOOK_SECRET" | npx wrangler@4 secret put WEBHOOK_SECRET --account-id ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: printf "%s" "$WEBHOOK_SECRET" | npx wrangler@4 secret put WEBHOOK_SECRET

@@ -71,7 +71,8 @@ const handler = {
 
         const attachments = Array.isArray(email.attachments)
           ? email.attachments.map((attachment) => {
-              const oversized = typeof attachment.size === 'number' && attachment.size > attachmentMaxBytes;
+              const reportedSize = typeof attachment.size === 'number' ? attachment.size : attachment.content?.byteLength;
+              const oversized = typeof reportedSize === 'number' && reportedSize > attachmentMaxBytes;
               return {
                 filename: attachment.filename,
                 contentType: attachment.contentType,

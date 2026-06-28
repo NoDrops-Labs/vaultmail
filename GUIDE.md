@@ -134,6 +134,9 @@ npx wrangler secret put FORWARD_DOMAINS
 # Enter: yourdomain.com,other.com
 
 # Optional: forward copies to a real mailbox
+# Privacy note: this sends ALL inbound mail to an external mailbox. If the address
+# is publicly known or belongs to a third-party provider, sender/content privacy is
+# reduced. Leave empty if you only need the Vaultmail inbox and webhook.
 npx wrangler secret put FORWARD_EMAIL
 # Enter: your@email.com (or leave empty)
 ```
