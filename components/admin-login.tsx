@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/client/api-fetch';
+import { TurnstileWidget } from '@/components/turnstile-widget';
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
@@ -77,10 +78,7 @@ export function AdminLogin() {
             />
             {TURNSTILE_SITE_KEY && (
               <div className="flex justify-center">
-                <div
-                  className="cf-turnstile"
-                  data-sitekey={TURNSTILE_SITE_KEY}
-                />
+                <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} />
               </div>
             )}
             <Button type="submit" disabled={loading} className="w-full">
