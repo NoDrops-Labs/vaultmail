@@ -152,6 +152,8 @@ For each domain you want to receive email on:
 
 Repeat for each domain.
 
+**Important:** inbound Email Routing does **not** use a Worker binding like `send_email`. The "binding" is the routing rule itself. The Worker only needs to export an `email()` handler.
+
 **If the dropdown says "No deployed Email Workers found":**
 - Make sure you deployed the Worker with `npx wrangler deploy` from the `worker/` directory
 - Make sure `worker/src/index.js` only exports an `email()` handler and no `fetch()` handler
@@ -159,7 +161,23 @@ Repeat for each domain.
 - Confirm the Worker name in `worker/wrangler.toml` matches the name shown in the dropdown
 - If it still does not appear, try creating the rule directly from **Email Service** → **Email Routing** → **Routing Rules** after the domain is onboarded
 
-### Step 4: Test Real Email
+### Step 4: Configure via Cloudflare API (Alternative)
+
+If the dashboard dropdown still does not list the Worker, you can create the catch-all rule directly through the Cloudflare API.
+
+1. Get your **Zone ID** from the Cloudflare Dashboard (domain overview, right sidebar)
+2. Create an API token with **Email Routing** edit permissions
+3. Run:
+
+```bash
+export CLOUDFLARE_API_TOKEN=your_token
+export CLOUDFLARE_ZONE_ID=your_zone_id
+npx tsx scripts/setup-email-routing.ts
+```
+
+This creates (or updates) the catch-all rule to route all emails to the `dispomail-forwarder` Worker.
+
+### Step 5: Test Real Email
 
 Send a test email to `anything@yourdomain.com`:
 - It arrives at Cloudflare Email Routing
