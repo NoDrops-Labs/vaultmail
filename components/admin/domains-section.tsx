@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Copy, Loader2, Plus, Trash2 } from 'lucide-react';
@@ -105,9 +106,15 @@ export function DomainsSection({
         </div>
       </div>
 
-      {domainToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-background p-6 shadow-xl">
+      {domainToDelete && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4"
+          onClick={cancelDelete}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-900 p-6 text-white shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
             <h3 className="text-base md:text-lg font-semibold text-white">Delete Domain</h3>
             <p className="mt-2 text-xs md:text-sm text-white/70">
               Are you sure you want to delete <span className="font-mono font-bold">{domainToDelete}</span>? 
@@ -122,7 +129,8 @@ export function DomainsSection({
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

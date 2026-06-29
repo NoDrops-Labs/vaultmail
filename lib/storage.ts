@@ -66,6 +66,32 @@ type ListItemDocument = {
 const isExpired = (expiresAt?: Date | null) =>
   Boolean(expiresAt && expiresAt.getTime() <= Date.now());
 
+type CacheEntry = { value: StoredValue; expires: number };
+
+const settingsCache = new Map<string, CacheEntry>();
+const SETTINGS_CACHE_TTL = 60_000;
+const SETTINGS_PREFIX = 'settings:';
+
+const isSettingsKey = (key: string) => key.startsWith(SETTINGS_PREFIX);
+
+const readSettingsCache = (key: string): StoredValue | null => {
+  const entry = settingsCache.get(key);
+  if (!entry) return null;
+  if (Date.now() >= entry.expires) {
+    settingsCache.delete(key);
+    return null;
+  }
+  return entry.value;
+};
+
+const writeSettingsCache = (key: string, value: StoredValue) => {
+  settingsCache.set(key, { value, expires: Date.now() + SETTINGS_CACHE_TTL });
+};
+
+const invalidateSettingsCache = (key: string) => {
+  if (isSettingsKey(key)) settingsCache.delete(key);
+};
+
 const cleanupExpiredList = async (db: Db, key: string) => {
   const listMeta = db.collection<ListMetaDocument>('list_meta');
   const listItems = db.collection<ListItemDocument>('list_items');
@@ -97,6 +123,10 @@ const patternToRegex = (pattern: string) => {
 
 export const storage = {
   async get(key: string) {
+    if (isSettingsKey(key)) {
+      const cached = readSettingsCache(key);
+      if (cached !== null) return cached;
+    }
     return withDb<StoredValue | null>(null, async (db) => {
       const kv = db.collection<KeyValueDocument>('kv_store');
       const doc = await kv.findOne({ _id: key });
@@ -105,11 +135,13 @@ export const storage = {
         await kv.deleteOne({ _id: key });
         return null;
       }
+      if (isSettingsKey(key)) writeSettingsCache(key, doc.value);
       return doc.value;
     });
   },
 
   async set(key: string, value: StoredValue, options?: { ex?: number }) {
+    invalidateSettingsCache(key);
     await withDb<void>(undefined, async (db) => {
       const kv = db.collection<KeyValueDocument>('kv_store');
       const expiresAt = options?.ex
@@ -120,6 +152,58 @@ export const storage = {
         { $set: { value, expiresAt } },
         { upsert: true }
       );
+    });
+    if (isSettingsKey(key)) writeSettingsCache(key, value);
+  },
+
+  async setIfAbsent(key: string, value: StoredValue, options?: { ex?: number }): Promise<boolean> {
+    invalidateSettingsCache(key);
+    return withDb<boolean>(false, async (db) => {
+      const kv = db.collection<KeyValueDocument>('kv_store');
+      const now = new Date();
+      const expiresAt = options?.ex
+        ? new Date(Date.now() + options.ex * 1000)
+        : null;
+
+      // Try to insert a new document. If _id already exists, this throws E11000.
+      try {
+        await kv.insertOne({ _id: key, value, expiresAt });
+        return true;
+      } catch (err: unknown) {
+        // E11000 = duplicate key — document already exists
+        const code = (err as { code?: number }).code;
+        if (code !== 11000) throw err;
+      }
+
+      // Document exists. Try to acquire if it's expired (replace atomically).
+      const result = await kv.findOneAndUpdate(
+        { _id: key, $or: [{ expiresAt: null }, { expiresAt: { $lt: now } }] },
+        { $set: { value, expiresAt } },
+        { returnDocument: 'after' }
+      );
+      return result !== null;
+    });
+  },
+
+  async kvKeys(pattern: string): Promise<string[]> {
+    return withDb<string[]>([], async (db) => {
+      const kv = db.collection<KeyValueDocument>('kv_store');
+      const regex = patternToRegex(pattern);
+      const docs = await kv.find({ _id: { $regex: regex } }).toArray();
+      const now = Date.now();
+      const validKeys: string[] = [];
+      const expiredKeys: string[] = [];
+      for (const doc of docs) {
+        if (doc.expiresAt && doc.expiresAt.getTime() <= now) {
+          expiredKeys.push(doc._id);
+        } else {
+          validKeys.push(doc._id);
+        }
+      }
+      if (expiredKeys.length > 0) {
+        await kv.deleteMany({ _id: { $in: expiredKeys } });
+      }
+      return validKeys;
     });
   },
 
@@ -137,6 +221,7 @@ export const storage = {
   },
 
   async del(key: string) {
+    invalidateSettingsCache(key);
     await withDb<void>(undefined, async (db) => {
       const kv = db.collection<KeyValueDocument>('kv_store');
       await kv.deleteOne({ _id: key });
@@ -144,6 +229,7 @@ export const storage = {
   },
 
   async expire(key: string, seconds: number) {
+    invalidateSettingsCache(key);
     await withDb<void>(undefined, async (db) => {
       const kv = db.collection<KeyValueDocument>('kv_store');
       const listMeta = db.collection<ListMetaDocument>('list_meta');

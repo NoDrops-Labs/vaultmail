@@ -26,6 +26,7 @@ import { FaviconSection } from './admin/favicon-section';
 import { AccentColorSection } from './admin/accent-color-section';
 import { HomepageLockSection } from './admin/homepage-lock-section';
 import { DomainsSection } from './admin/domains-section';
+import { CloudflareDomainsSection } from './admin/cloudflare-domains-section';
 import { ImapSection } from './admin/imap-section';
 import { TelegramSection } from './admin/telegram-section';
 import { RetentionSection } from './admin/retention-section';
@@ -481,6 +482,8 @@ export function AdminDashboard() {
               confirmDelete={confirmRemoveDomain}
               cancelDelete={cancelRemoveDomain}
             />
+
+            <CloudflareDomainsSection onDomainAdded={loadSettings} />
 
             <hr className="border-white/10 my-2" />
 

@@ -40,3 +40,9 @@ export const telegramPostSchema = z.object({
 });
 
 export type TelegramPostPayload = z.infer<typeof telegramPostSchema>;
+
+export const cloudflareDomainPostSchema = z.object({
+  domain: z.string().min(1).max(253),
+});
+
+export type CloudflareDomainPostPayload = z.infer<typeof cloudflareDomainPostSchema>;

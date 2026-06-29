@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { storage } from '@/lib/storage';
 import { withPrefix } from '@/lib/storage-keys';
 
@@ -19,4 +20,41 @@ export const isAdminSessionValid = async (token?: string | null) => {
   if (!token) return false;
   const exists = await storage.exists(`${ADMIN_SESSION_PREFIX}${token}`);
   return Boolean(exists);
+};
+
+/**
+ * Timing-safe admin password verification using SHA-256 hash comparison.
+ *
+ * The ADMIN_PASSWORD env var is hashed once per process (lazy module-level cache).
+ * Submitted passwords are hashed per-request and compared with crypto.timingSafeEqual()
+ * to prevent timing side-channel attacks.
+ *
+ * Note: SHA-256 is sufficient here because the secret is env-provided (not user-chosen).
+ * If admin passwords move to MongoDB, switch to scrypt/argon2 KDF.
+ */
+let cachedAdminHash: Buffer | null = null;
+let cachedAdminHashSource: string | null = null;
+
+const getAdminHash = (): Buffer | null => {
+  const envPassword = process.env.ADMIN_PASSWORD ?? '';
+  if (!envPassword) return null;
+
+  // Re-hash if the env var changed (edge case: hot-reload in dev)
+  if (cachedAdminHash && cachedAdminHashSource === envPassword) {
+    return cachedAdminHash;
+  }
+
+  cachedAdminHash = crypto.createHash('sha256').update(envPassword).digest();
+  cachedAdminHashSource = envPassword;
+  return cachedAdminHash;
+};
+
+export const verifyAdminPassword = (submitted: string): boolean => {
+  const expected = getAdminHash();
+  if (!expected) return false;
+
+  const submittedHash = crypto.createHash('sha256').update(submitted).digest();
+  if (submittedHash.length !== expected.length) return false;
+
+  return crypto.timingSafeEqual(submittedHash, expected);
 };

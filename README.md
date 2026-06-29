@@ -34,10 +34,14 @@ User browses / -> InboxInterface polls GET /api/inbox -> displays emails
 
 - Privacy-first: emails stored in MongoDB with auto-expiry (30 min to 1 week)
 - Custom domains: admin-configured, multi-subdomain support (root + subdomain pools)
+- Cloudflare domain onboarding: add domains via Cloudflare API from the admin UI (auto-configures nameservers, Email Routing, catch-all rule)
 - Real-time inbox: auto-refreshes every 10 seconds
 - 3-mode auth: API key (50 req/min), session (15 req/min), anonymous (rate-limited)
 - Per-endpoint rate limits with global abuse ceiling
 - Cloudflare Turnstile: free bot protection on admin login
+- Timing-safe admin password verification (SHA-256 hash + crypto.timingSafeEqual)
+- HSTS + forced secure cookies in production
+- Settings cache: in-memory TTL cache for `settings:*` reads (reduces MongoDB load)
 - Dynamic branding: admin-configurable app name, favicon, and accent color
 - Dark glassmorphism UI with responsive mobile design
 - Tools: 2FA generator, Gmail dot trick, token generator, URL codec, day counter, refund calculator, email breach checker

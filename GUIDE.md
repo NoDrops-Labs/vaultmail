@@ -70,8 +70,18 @@ Go to Site settings → Environment variables. Add each with scope **Functions**
 | `ATTACHMENT_MAX_BYTES` | Functions | `2000000` | Optional |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Builds | `<Cloudflare site key>` | Optional* |
 | `TURNSTILE_SECRET_KEY` | Functions | `<Cloudflare secret key>` | Optional |
+| `CLOUDFLARE_ADMIN_API_TOKEN` | Functions | `<Cloudflare admin token>` | Optional** |
+| `CLOUDFLARE_ACCOUNT_ID` | Functions | `<Cloudflare account ID>` | Optional** |
 
 **Turnstile setup:** The widget on `/admin` is rendered by the browser, so it needs the **public** site key (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`). The server verifies tokens with `TURNSTILE_SECRET_KEY`. If you set the secret but forget the public key, login will fail because the widget never appears. Set both and redeploy.
+
+**Cloudflare domain onboarding (optional):** To enable the "Add domain via Cloudflare" feature in the admin panel, set `CLOUDFLARE_ADMIN_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. This token is **separate** from the Worker deploy token (`CLOUDFLARE_API_TOKEN` in GitHub Actions). Create it at Cloudflare Dashboard → My Profile → API Tokens → Create Token, with these permissions:
+- **Zone** → **Zone Write** (create zones, trigger activation check)
+- **Zone** → **Zone Read** (list/get zone status)
+- **Zone** → **Email Routing Rules Write** (enable routing + catch-all rule)
+- **Zone** → **Zone Settings Write** (lock MX/SPF records)
+
+Account resources → Include → your account. Zone resources → Include → All zones from an account → your account. Leave both empty if you don't want the admin UI to manage domains via Cloudflare.
 
 **Do NOT add the following Worker-only variables to Netlify** — they belong in the Cloudflare Worker (see Phase 3): `WEBHOOK_URL`, `FORWARD_DOMAINS`, `FORWARD_EMAIL`.
 
@@ -245,10 +255,15 @@ Send a test email to `anything@yourdomain.com`:
 1. Open `https://<site-name>.netlify.app/admin`
 2. Login with your `ADMIN_PASSWORD`
 3. **Domains** → add your domains (root + subdomains if using multi-subdomain)
-4. **Retention** → set email lifespan (default 24h)
-5. **Branding** → set app name, upload favicon, pick accent color
-6. **API Keys** → generate keys for programmatic access
-7. **Homepage Lock** → optionally enable password protection
+4. **Cloudflare Domain Onboarding** (optional, requires `CLOUDFLARE_ADMIN_API_TOKEN`):
+   - Enter a domain and click "Add"
+   - The app creates the zone in Cloudflare and displays the assigned nameservers
+   - Set those nameservers at your registrar
+   - Click "Sync" (or wait 30s for auto-poll) — the app verifies NS, enables Email Routing, sets the catch-all rule, and adds the domain to the app automatically
+5. **Retention** → set email lifespan (default 24h)
+6. **Branding** → set app name, upload favicon, pick accent color
+7. **API Keys** → generate keys for programmatic access
+8. **Homepage Lock** → optionally enable password protection
 
 ### Step 2: Optional Features
 
@@ -359,13 +374,23 @@ npm run build    # turbopack build
                     │  - Rate limiting    │
                     │  - Zod validation   │
                     │  - Turnstile        │
+                    │  - Settings cache   │
+                    │  - CF domain API    │
                     └──────────┬──────────┘
                                │
+              ┌────────────────┼────────────────┐
+              │                │                │
+    ┌─────────▼─────────┐     │      ┌─────────▼─────────┐
+    │  MongoDB Atlas    │     │      │  Cloudflare API   │
+    │  - kv_store (TTL) │     │      │  (zone mgmt +     │
+    │  - list_meta      │     │      │   email routing)  │
+    │  - list_items     │     │      └───────────────────┘
+    └───────────────────┘     │
+                               │
                     ┌──────────▼──────────┐
-                    │    MongoDB Atlas    │
-                    │  - kv_store (TTL)   │
-                    │  - list_meta        │
-                    │  - list_items       │
+                    │  Admin UI (/admin)  │
+                    │  - Domain onboarding│
+                    │  - Branding, etc.   │
                     └─────────────────────┘
 ```
 
@@ -416,3 +441,5 @@ npm run build    # turbopack build
 - [ ] API keys generated only for trusted users
 - [ ] Turnstile enabled on admin login
 - [ ] MongoDB Atlas network access set to `0.0.0.0/0` (or Netlify IPs)
+- [ ] HSTS header present (automatically set in production via `next.config.ts` + `netlify.toml`)
+- [ ] `CLOUDFLARE_ADMIN_API_TOKEN` scoped to zone management only (separate from Worker deploy token)

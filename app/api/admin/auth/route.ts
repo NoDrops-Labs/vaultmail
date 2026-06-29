@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { storage } from '@/lib/storage';
-import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_PREFIX } from '@/lib/admin-auth';
+import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_PREFIX, verifyAdminPassword } from '@/lib/admin-auth';
 import {
   checkRateLimit,
   registerRateLimitFailure,
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
 
   const adminPassword = process.env.ADMIN_PASSWORD;
 
-  if (!adminPassword || password !== adminPassword) {
+  if (!adminPassword || !verifyAdminPassword(password)) {
     const failure = await registerRateLimitFailure(request, 'admin-login');
     if (failure.blocked) {
       return NextResponse.json(
@@ -89,12 +89,13 @@ export async function POST(request: Request) {
   const forwardedProto = request.headers.get('x-forwarded-proto');
   const isHttps =
     forwardedProto === 'https' || new URL(request.url).protocol === 'https:';
+  const secureCookie = process.env.NODE_ENV === 'production' ? true : isHttps;
   response.cookies.set({
     name: ADMIN_SESSION_COOKIE,
     value: token,
     httpOnly: true,
     sameSite: 'lax',
-    secure: isHttps,
+    secure: secureCookie,
     path: '/',
     maxAge
   });
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
     value: createCsrfToken(),
     httpOnly: false,
     sameSite: 'lax',
-    secure: isHttps,
+    secure: secureCookie,
     path: '/',
     maxAge
   });

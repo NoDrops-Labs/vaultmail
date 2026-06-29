@@ -47,3 +47,29 @@ export type ApiKeyView = {
   createdAt: string;
   lastUsedAt?: string;
 };
+
+export type OnboardingStep =
+  | 'pending_ns'
+  | 'active'
+  | 'email_routing_enabled'
+  | 'catch_all_configured'
+  | 'added_to_app'
+  | 'failed_retryable'
+  | 'failed_terminal';
+
+export type OnboardingRecord = {
+  domain: string;
+  zoneId: string | null;
+  nameservers: string[] | null;
+  cfStatus: string | null;
+  step: OnboardingStep;
+  error?: { code: number; message: string; retryable: boolean };
+  createdAt: string;
+  updatedAt: string;
+  lastCheckedAt: string | null;
+};
+
+export type CloudflareOnboardingListResponse = {
+  records: OnboardingRecord[];
+  configured: boolean;
+};
