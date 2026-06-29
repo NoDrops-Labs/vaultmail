@@ -6,14 +6,25 @@ import { Toaster } from 'sonner';
 import AdsenseScript from '@/components/AdsenseScript';
 import { getStoredAppName } from '@/lib/branding-settings';
 import { getAccentColor } from '@/lib/accent-color';
+import { getFaviconSettings } from '@/lib/favicon';
 
 export async function generateMetadata(): Promise<Metadata> {
-  const appName = await getStoredAppName();
+  const [appName, favicon] = await Promise.all([getStoredAppName(), getFaviconSettings()]);
+  const faviconUrl = favicon?.hash ? `/api/favicon?v=${favicon.hash}` : '/api/favicon';
   return {
     title: `${appName} - Secure Disposable Email`,
     description: 'Self Hosted Temporary email service with custom domains.',
+    manifest: '/site.webmanifest',
     icons: {
-      icon: '/api/favicon',
+      icon: [
+        { url: faviconUrl, sizes: 'any' },
+        { url: faviconUrl, sizes: '192x192', type: 'image/png' },
+        { url: faviconUrl, sizes: '512x512', type: 'image/png' },
+      ],
+      shortcut: faviconUrl,
+      apple: [
+        { url: faviconUrl, sizes: '180x180', type: 'image/png' },
+      ],
     }
   };
 }

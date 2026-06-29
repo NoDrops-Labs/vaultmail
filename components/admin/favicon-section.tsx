@@ -100,8 +100,8 @@ export function FaviconSection() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 512 * 1024) {
-      toast.error('File size must be less than 512KB');
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('File size must be less than 2MB');
       return;
     }
 
