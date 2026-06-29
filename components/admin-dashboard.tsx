@@ -30,6 +30,7 @@ import { ImapSection } from './admin/imap-section';
 import { TelegramSection } from './admin/telegram-section';
 import { RetentionSection } from './admin/retention-section';
 import { ApiKeysSection } from './admin/api-keys-section';
+import { DonationSection } from './admin/donation-section';
 
 const normalizeDomains = (domains: string[]) =>
   [...new Set(domains.map((domain) => domain.toLowerCase().trim()).filter(Boolean))];
@@ -64,6 +65,10 @@ export function AdminDashboard() {
   });
   const [imapSaving, setImapSaving] = useState(false);
   const [imapTesting, setImapTesting] = useState(false);
+  const [donationEnabled, setDonationEnabled] = useState(false);
+  const [donationAddress, setDonationAddress] = useState('');
+  const [donationMessage, setDonationMessage] = useState('If this project helped you, consider supporting with a donation');
+  const [donationSaving, setDonationSaving] = useState(false);
   const [apiKeys, setApiKeys] = useState<ApiKeyView[]>([]);
   const [locale, setLocale] = useState<'en' | 'id'>('en');
 
@@ -87,7 +92,8 @@ export function AdminDashboard() {
         domainsResponse,
         homepageLockResponse,
         imapResponse,
-        apiKeysResponse
+        apiKeysResponse,
+        donationResponse
       ] = await Promise.all([
         apiFetch('/api/admin/telegram'),
         apiFetch('/api/admin/retention'),
@@ -95,7 +101,8 @@ export function AdminDashboard() {
         apiFetch('/api/admin/domains'),
         apiFetch('/api/admin/homepage-lock'),
         apiFetch('/api/admin/imap'),
-        apiFetch('/api/admin/api-keys')
+        apiFetch('/api/admin/api-keys'),
+        apiFetch('/api/admin/donation')
       ]);
       if (
         !telegramResponse.ok ||
@@ -104,7 +111,8 @@ export function AdminDashboard() {
         !domainsResponse.ok ||
         !homepageLockResponse.ok ||
         !imapResponse.ok ||
-        !apiKeysResponse.ok
+        !apiKeysResponse.ok ||
+        !donationResponse.ok
       ) {
         throw new Error('Unauthorized or failed to load settings.');
       }
@@ -118,6 +126,11 @@ export function AdminDashboard() {
       const imapData = (await imapResponse.json()) as ImapSettings;
       const apiKeysData = (await apiKeysResponse.json()) as {
         keys: ApiKeyView[];
+      };
+      const donationData = (await donationResponse.json()) as {
+        enabled: boolean;
+        evmAddress: string;
+        message: string;
       };
       setTelegramEnabled(Boolean(data.enabled));
       setBotToken(data.botToken || '');
@@ -140,6 +153,9 @@ export function AdminDashboard() {
       setHomepageLockHasPassword(Boolean(homepageLockData?.hasPassword));
       setImapSettings((prev) => ({ ...prev, ...imapData }));
       setApiKeys(apiKeysData.keys || []);
+      setDonationEnabled(Boolean(donationData?.enabled));
+      setDonationAddress(donationData?.evmAddress || '');
+      setDonationMessage(donationData?.message || 'If this project helped you, consider supporting with a donation');
     } catch (error) {
       console.error(error);
       toast.error('Failed to load admin settings.');
@@ -190,6 +206,31 @@ export function AdminDashboard() {
       toast.error('Failed to save Telegram settings.');
     } finally {
       setTelegramSaving(false);
+    }
+  };
+
+  const saveDonationSettings = async () => {
+    setDonationSaving(true);
+    try {
+      const response = await apiFetch('/api/admin/donation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: donationEnabled,
+          evmAddress: donationAddress,
+          message: donationMessage
+        })
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || 'Failed to save donation settings');
+      }
+      toast.success('Donation settings saved.');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Failed to save donation settings.');
+    } finally {
+      setDonationSaving(false);
     }
   };
 
@@ -485,6 +526,19 @@ export function AdminDashboard() {
               setAllowedDomains={setAllowedDomains}
               onSave={saveTelegramSettings}
               saving={telegramSaving}
+            />
+
+            <hr className="border-white/10 my-2" />
+
+            <DonationSection
+              enabled={donationEnabled}
+              setEnabled={setDonationEnabled}
+              evmAddress={donationAddress}
+              setEvmAddress={setDonationAddress}
+              message={donationMessage}
+              setMessage={setDonationMessage}
+              onSave={saveDonationSettings}
+              saving={donationSaving}
             />
           </div>
         </div>

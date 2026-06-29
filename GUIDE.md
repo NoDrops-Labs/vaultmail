@@ -263,7 +263,8 @@ Send a test email to `anything@yourdomain.com`:
 5. **Retention** → set email lifespan (default 24h)
 6. **Branding** → set app name, upload favicon, pick accent color
 7. **API Keys** → generate keys for programmatic access
-8. **Homepage Lock** → optionally enable password protection
+8. **Donation** → enable floating coffee button with EVM address + QR code + custom message
+9. **Homepage Lock** → optionally enable password protection
 
 ### Step 2: Optional Features
 

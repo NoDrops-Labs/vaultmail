@@ -43,6 +43,7 @@ User browses / -> InboxInterface polls GET /api/inbox -> displays emails
 - HSTS + forced secure cookies in production
 - Settings cache: in-memory TTL cache for `settings:*` reads (reduces MongoDB load)
 - Dynamic branding: admin-configurable app name, favicon, and accent color
+- Donation button: floating coffee icon on all pages with EVM address QR code (admin-configurable)
 - Dark glassmorphism UI with responsive mobile design
 - Tools: 2FA generator, Gmail dot trick, token generator, URL codec, day counter, refund calculator, email breach checker
 - Developer API access page (gated by API key)

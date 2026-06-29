@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Copy, Loader2, Plus, RefreshCw, RotateCcw, Trash2, X, AlertTriangle } from 'lucide-react';
+import { Copy, Loader2, Plus, RefreshCw, RotateCcw, Trash2, X, TriangleAlert } from 'lucide-react';
 import { apiFetch } from '@/lib/client/api-fetch';
 import type {
   CloudflareOnboardingListResponse,
@@ -470,7 +470,7 @@ export function CloudflareDomainsSection({ onDomainAdded }: CloudflareDomainsSec
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="h-5 w-5 text-red-400" />
+              <TriangleAlert className="h-5 w-5 text-red-400" />
               <h3 className="text-base font-semibold text-white">Fully Remove from Cloudflare</h3>
             </div>
             <p className="mt-2 text-xs text-white/70">

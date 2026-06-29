@@ -46,3 +46,27 @@ export const cloudflareDomainPostSchema = z.object({
 });
 
 export type CloudflareDomainPostPayload = z.infer<typeof cloudflareDomainPostSchema>;
+
+const evmAddressRegex = /^0x[a-fA-F0-9]{40}$/;
+
+export const donationPostSchema = z
+  .object({
+    enabled: z.boolean(),
+    evmAddress: z.string().trim(),
+    message: z
+      .string()
+      .trim()
+      .max(240, 'Donation message must be 240 characters or less')
+      .default('If this project helped you, consider supporting with a donation'),
+  })
+  .superRefine((data, ctx) => {
+    if (data.enabled && !evmAddressRegex.test(data.evmAddress)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['evmAddress'],
+        message: 'Enter a valid EVM address: 0x followed by 40 hex characters',
+      });
+    }
+  });
+
+export type DonationPostPayload = z.infer<typeof donationPostSchema>;

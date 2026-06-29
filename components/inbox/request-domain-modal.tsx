@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import { useEffect } from 'react';
-import { X, Cloud, Server, CheckCircle2 } from 'lucide-react';
+import { X, Cloud, Server, CircleCheck } from 'lucide-react';
 
 interface RequestDomainModalProps {
   onClose: () => void;
@@ -69,7 +69,7 @@ export function RequestDomainModal({ onClose }: RequestDomainModalProps) {
 
           <div className="flex gap-3">
             <div className="flex-shrink-0 mt-0.5">
-              <CheckCircle2 className="h-4 w-4 text-green-400" />
+              <CircleCheck className="h-4 w-4 text-green-400" />
             </div>
             <div>
               <p className="text-xs font-medium text-white">3. Update nameservers at your registrar</p>
@@ -81,7 +81,7 @@ export function RequestDomainModal({ onClose }: RequestDomainModalProps) {
 
           <div className="flex gap-3">
             <div className="flex-shrink-0 mt-0.5">
-              <CheckCircle2 className="h-4 w-4 text-green-400" />
+              <CircleCheck className="h-4 w-4 text-green-400" />
             </div>
             <div>
               <p className="text-xs font-medium text-white">4. Domain is ready</p>

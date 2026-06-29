@@ -15,6 +15,7 @@ export const API_KEYS_SETTINGS_KEY = withPrefix('settings:api-keys');
 export const FAVICON_SETTINGS_KEY = withPrefix('settings:favicon');
 export const ACCENT_COLOR_SETTINGS_KEY = withPrefix('settings:accent-color');
 export const ACCENT_PALETTE_SETTINGS_KEY = withPrefix('settings:accent-palette');
+export const DONATION_SETTINGS_KEY = withPrefix('settings:donation');
 
 export const isAdminSessionValid = async (token?: string | null) => {
   if (!token) return false;

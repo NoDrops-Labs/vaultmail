@@ -7,6 +7,8 @@ import AdsenseScript from '@/components/AdsenseScript';
 import { getStoredAppName } from '@/lib/branding-settings';
 import { getAccentColor } from '@/lib/accent-color';
 import { getFaviconSettings } from '@/lib/favicon';
+import { getDonationSettings } from '@/lib/donation-settings';
+import { DonationFloatingButton } from '@/components/donation-button';
 
 export async function generateMetadata(): Promise<Metadata> {
   const [appName, favicon] = await Promise.all([getStoredAppName(), getFaviconSettings()]);
@@ -34,7 +36,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const rawAccent = await getAccentColor();
+  const [rawAccent, donationSettings] = await Promise.all([
+    getAccentColor(),
+    getDonationSettings(),
+  ]);
   const accentColor = rawAccent && /^#[0-9a-fA-F]{3,8}$/.test(rawAccent) ? rawAccent : null;
 
   return (
@@ -52,6 +57,12 @@ export default async function RootLayout({
           defer
         />
         {children}
+        {donationSettings?.enabled && donationSettings.evmAddress && (
+          <DonationFloatingButton
+            evmAddress={donationSettings.evmAddress}
+            message={donationSettings.message}
+          />
+        )}
         <Toaster position="bottom-right" theme="dark" toastOptions={{ style: { background: 'rgba(15, 15, 15, 0.9)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(12px)' } }} />
       </body>
     </html>
