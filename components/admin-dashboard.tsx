@@ -25,7 +25,6 @@ import { BrandingSection } from './admin/branding-section';
 import { FaviconSection } from './admin/favicon-section';
 import { AccentColorSection } from './admin/accent-color-section';
 import { HomepageLockSection } from './admin/homepage-lock-section';
-import { DomainsSection } from './admin/domains-section';
 import { CloudflareDomainsSection } from './admin/cloudflare-domains-section';
 import { ImapSection } from './admin/imap-section';
 import { TelegramSection } from './admin/telegram-section';
@@ -41,12 +40,10 @@ export function AdminDashboard() {
   const [chatId, setChatId] = useState('');
   const [availableDomains, setAvailableDomains] = useState<string[]>([]);
   const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
-  const [newDomain, setNewDomain] = useState('');
   const [retentionSeconds, setRetentionSeconds] = useState(86400);
   const [telegramSaving, setTelegramSaving] = useState(false);
   const [retentionSaving, setRetentionSaving] = useState(false);
   const [brandingSaving, setBrandingSaving] = useState(false);
-  const [domainsSaving, setDomainsSaving] = useState(false);
   const [appName, setAppName] = useState(DEFAULT_APP_NAME);
   const [homepageLockEnabled, setHomepageLockEnabled] = useState(false);
   const [homepageLockPassword, setHomepageLockPassword] = useState('');
@@ -55,7 +52,6 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState(false);
-  const [domainToDelete, setDomainToDelete] = useState<string | null>(null);
   const [imapSettings, setImapSettings] = useState<ImapSettings>({
     enabled: false,
     host: '',
@@ -269,63 +265,6 @@ export function AdminDashboard() {
     }
   };
 
-  const saveDomains = async (
-    nextDomains: string[],
-    successMessage = 'Domains saved.'
-  ) => {
-    setDomainsSaving(true);
-    try {
-      const response = await apiFetch('/api/admin/domains', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domains: nextDomains })
-      });
-      if (!response.ok) {
-        throw new Error('Unauthorized or failed to save domains.');
-      }
-      const data = (await response.json()) as DomainsSettings;
-      const normalized = normalizeDomains(data.domains || []);
-      setAvailableDomains(normalized);
-      setAllowedDomains((prev) =>
-        prev.filter((domain) => normalized.includes(domain))
-      );
-      toast.success(successMessage);
-    } catch (error) {
-      console.error(error);
-      toast.error('Failed to save domains.');
-    } finally {
-      setDomainsSaving(false);
-    }
-  };
-
-  const handleAddDomain = async () => {
-    const domain = newDomain.toLowerCase().trim();
-    if (!domain || availableDomains.includes(domain)) return;
-    const nextDomains = normalizeDomains([...availableDomains, domain]);
-    setNewDomain('');
-    setAvailableDomains(nextDomains);
-    setAllowedDomains((prev) => normalizeDomains([...prev, domain]));
-    await saveDomains(nextDomains, 'Domain added.');
-  };
-
-  const handleRemoveDomain = (domain: string) => {
-    setDomainToDelete(domain);
-  };
-
-  const confirmRemoveDomain = async () => {
-    if (!domainToDelete) return;
-    const domain = domainToDelete;
-    const nextDomains = availableDomains.filter((item) => item !== domain);
-    setAvailableDomains(nextDomains);
-    setAllowedDomains((prev) => prev.filter((item) => item !== domain));
-    setDomainToDelete(null);
-    await saveDomains(nextDomains, 'Domain deleted.');
-  };
-
-  const cancelRemoveDomain = () => {
-    setDomainToDelete(null);
-  };
-
   const saveImapSettings = async () => {
     setImapSaving(true);
     try {
@@ -368,16 +307,6 @@ export function AdminDashboard() {
       );
     } finally {
       setImapTesting(false);
-    }
-  };
-
-  const handleCopyDomain = async (domain: string) => {
-    try {
-      await navigator.clipboard.writeText(domain);
-      toast.success('Domain copied to clipboard.');
-    } catch (error) {
-      console.error(error);
-      toast.error('Failed to copy domain.');
     }
   };
 
@@ -469,19 +398,6 @@ export function AdminDashboard() {
             <AccentColorSection />
 
             <hr className="border-white/10 my-2" />
-
-            <DomainsSection
-              availableDomains={availableDomains}
-              newDomain={newDomain}
-              setNewDomain={setNewDomain}
-              onAdd={handleAddDomain}
-              onRemove={handleRemoveDomain}
-              onCopy={handleCopyDomain}
-              saving={domainsSaving}
-              domainToDelete={domainToDelete}
-              confirmDelete={confirmRemoveDomain}
-              cancelDelete={cancelRemoveDomain}
-            />
 
             <CloudflareDomainsSection onDomainAdded={loadSettings} />
 

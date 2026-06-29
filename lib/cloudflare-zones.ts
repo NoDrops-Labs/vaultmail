@@ -179,3 +179,10 @@ export async function setCatchAllRule(zoneId: string, workerName: string): Promi
 export function isCloudflareConfigured(): boolean {
   return Boolean(process.env.CLOUDFLARE_ADMIN_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID);
 }
+
+export async function deleteZone(zoneId: string): Promise<void> {
+  await cfFetch<{ id: string }>(
+    `/zones/${encodeURIComponent(zoneId)}`,
+    { method: 'DELETE' }
+  );
+}

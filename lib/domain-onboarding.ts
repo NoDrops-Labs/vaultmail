@@ -6,14 +6,16 @@ import {
   CloudflareApiError,
   type CfZone,
   createZone,
+  deleteZone,
   enableEmailRouting,
   findZoneByName,
   getZone,
   setCatchAllRule,
   triggerActivationCheck,
 } from '@/lib/cloudflare-zones';
-import { DOMAINS_SETTINGS_KEY } from '@/lib/admin-auth';
+import { DOMAINS_SETTINGS_KEY, DOMAINS_CONFIG_SETTINGS_KEY } from '@/lib/admin-auth';
 import { normalizeDomains, parseDomains } from '@/lib/domains';
+import type { MasterDomainConfig } from '@/lib/domain-config';
 
 export type OnboardingStep =
   | 'pending_ns'
@@ -34,6 +36,7 @@ export type OnboardingRecord = {
   createdAt: string;
   updatedAt: string;
   lastCheckedAt: string | null;
+  removedFromAppAt?: string | null;
 };
 
 const ONBOARDING_PREFIX = withPrefix('domain:onboarding:');
@@ -312,4 +315,207 @@ export async function listOnboarding(): Promise<OnboardingRecord[]> {
     records.push(parsed as OnboardingRecord);
   }
   return records.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+const setConfigEnabled = async (domain: string, enabled: boolean): Promise<void> => {
+  const raw = await storage.get(DOMAINS_CONFIG_SETTINGS_KEY);
+  let config: MasterDomainConfig[] = [];
+  if (typeof raw === 'string') {
+    try { config = JSON.parse(raw) as MasterDomainConfig[]; } catch { config = []; }
+  } else if (Array.isArray(raw)) {
+    config = raw as MasterDomainConfig[];
+  }
+  const idx = config.findIndex(
+    (c) => c.domain.toLowerCase().trim() === domain.toLowerCase().trim()
+  );
+  if (idx >= 0) {
+    config[idx].enabled = enabled;
+    await storage.set(DOMAINS_CONFIG_SETTINGS_KEY, config);
+  }
+};
+
+export class DomainStateError extends Error {
+  readonly statusCode: number;
+  constructor(message: string, statusCode: number) {
+    super(message);
+    this.name = 'DomainStateError';
+    this.statusCode = statusCode;
+  }
+}
+
+const acquireLock = async (domain: string): Promise<boolean> => {
+  return storage.setIfAbsent(lockKey(domain), '1', { ex: LOCK_TTL_SECONDS });
+};
+
+const acquireGlobalLock = async (): Promise<boolean> => {
+  return storage.setIfAbsent(DOMAINS_GLOBAL_LOCK_KEY, '1', { ex: LOCK_TTL_SECONDS });
+};
+
+/**
+ * Soft remove: remove domain from app active list but keep CF zone intact.
+ */
+export async function removeFromApp(domainInput: string): Promise<OnboardingRecord> {
+  const domain = normalizeDomain(domainInput);
+  const record = await readRecord(domain);
+  if (!record) {
+    throw new DomainStateError(`No onboarding record for ${domain}`, 404);
+  }
+  if (record.step !== 'added_to_app') {
+    throw new DomainStateError(`Domain must be in added_to_app state to remove (current: ${record.step})`, 400);
+  }
+
+  const acquired = await acquireLock(domain);
+  if (!acquired) {
+    throw new DomainStateError('Another operation is in progress. Try again in a minute.', 409);
+  }
+
+  try {
+    const globalAcquired = await acquireGlobalLock();
+    if (!globalAcquired) {
+      throw new DomainStateError('Settings are being updated by another operation. Try again.', 409);
+    }
+    try {
+      const storedRaw = await storage.get(DOMAINS_SETTINGS_KEY);
+      const current = normalizeDomains(parseDomains(storedRaw));
+      const next = current.filter((d) => d !== domain);
+      await storage.set(DOMAINS_SETTINGS_KEY, { domains: next });
+      await setConfigEnabled(domain, false);
+
+      record.removedFromAppAt = nowIso();
+      record.updatedAt = nowIso();
+      await writeRecord(record);
+      return record;
+    } finally {
+      await storage.del(DOMAINS_GLOBAL_LOCK_KEY);
+    }
+  } finally {
+    await releaseLock(domain);
+  }
+}
+
+/**
+ * Restore: re-add a soft-removed domain back to the app active list.
+ */
+export async function restoreToApp(domainInput: string): Promise<OnboardingRecord> {
+  const domain = normalizeDomain(domainInput);
+  const record = await readRecord(domain);
+  if (!record) {
+    throw new DomainStateError(`No onboarding record for ${domain}`, 404);
+  }
+  if (!record.removedFromAppAt) {
+    throw new DomainStateError('Domain is not removed from app', 400);
+  }
+
+  const acquired = await acquireLock(domain);
+  if (!acquired) {
+    throw new DomainStateError('Another operation is in progress. Try again in a minute.', 409);
+  }
+
+  try {
+    const globalAcquired = await acquireGlobalLock();
+    if (!globalAcquired) {
+      throw new DomainStateError('Settings are being updated by another operation. Try again.', 409);
+    }
+    try {
+      const storedRaw = await storage.get(DOMAINS_SETTINGS_KEY);
+      const current = normalizeDomains(parseDomains(storedRaw));
+      if (!current.includes(domain)) {
+        const next = normalizeDomains([...current, domain]);
+        await storage.set(DOMAINS_SETTINGS_KEY, { domains: next });
+      }
+      await setConfigEnabled(domain, true);
+
+      record.removedFromAppAt = null;
+      record.updatedAt = nowIso();
+      await writeRecord(record);
+      return record;
+    } finally {
+      await storage.del(DOMAINS_GLOBAL_LOCK_KEY);
+    }
+  } finally {
+    await releaseLock(domain);
+  }
+}
+
+/**
+ * Full remove: delete CF zone + clean all local state. Irreversible.
+ */
+export async function fullRemoveFromCloudflare(domainInput: string): Promise<void> {
+  const domain = normalizeDomain(domainInput);
+  const record = await readRecord(domain);
+
+  const acquired = await acquireLock(domain);
+  if (!acquired) {
+    throw new DomainStateError('Another operation is in progress. Try again in a minute.', 409);
+  }
+
+  try {
+    if (record?.zoneId) {
+      try {
+        await deleteZone(record.zoneId);
+      } catch (err) {
+        if (err instanceof CloudflareApiError && err.cfError.status === 404) {
+          // Zone already deleted — proceed with local cleanup
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    const globalAcquired = await acquireGlobalLock();
+    if (!globalAcquired) {
+      throw new DomainStateError('Settings are being updated by another operation. Try again.', 409);
+    }
+    try {
+      const storedRaw = await storage.get(DOMAINS_SETTINGS_KEY);
+      const current = normalizeDomains(parseDomains(storedRaw));
+      const next = current.filter((d) => d !== domain);
+      await storage.set(DOMAINS_SETTINGS_KEY, { domains: next });
+    } finally {
+      await storage.del(DOMAINS_GLOBAL_LOCK_KEY);
+    }
+
+    await storage.del(onboardingKey(domain));
+  } finally {
+    await releaseLock(domain);
+  }
+}
+
+/**
+ * Cancel onboarding: delete onboarding record for pending/failed domains.
+ * Optionally deletes the CF zone if zoneId exists and confirmZoneDelete is true.
+ */
+export async function cancelOnboarding(domainInput: string, confirmZoneDelete: boolean): Promise<void> {
+  const domain = normalizeDomain(domainInput);
+  const record = await readRecord(domain);
+  if (!record) {
+    throw new DomainStateError(`No onboarding record for ${domain}`, 404);
+  }
+
+  if (record.step === 'added_to_app' && !record.removedFromAppAt) {
+    throw new DomainStateError('Cannot cancel onboarding for active domain. Use removeFromApp instead.', 400);
+  }
+
+  const acquired = await acquireLock(domain);
+  if (!acquired) {
+    throw new DomainStateError('Another operation is in progress. Try again in a minute.', 409);
+  }
+
+  try {
+    if (record.zoneId && confirmZoneDelete) {
+      try {
+        await deleteZone(record.zoneId);
+      } catch (err) {
+        if (err instanceof CloudflareApiError && err.cfError.status === 404) {
+          // Zone already deleted
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    await storage.del(onboardingKey(domain));
+  } finally {
+    await releaseLock(domain);
+  }
 }

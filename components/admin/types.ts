@@ -67,6 +67,7 @@ export type OnboardingRecord = {
   createdAt: string;
   updatedAt: string;
   lastCheckedAt: string | null;
+  removedFromAppAt?: string | null;
 };
 
 export type CloudflareOnboardingListResponse = {

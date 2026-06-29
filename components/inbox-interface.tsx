@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { RefreshCw, Copy } from 'lucide-react';
+import { RefreshCw, Copy, Plus } from 'lucide-react';
 import { DEFAULT_EMAIL, getDefaultEmailDomain } from '@/lib/config';
 import { getTranslations, Locale } from '@/lib/i18n';
 import { apiFetch } from '@/lib/client/api-fetch';
@@ -13,6 +13,7 @@ import { EmailList } from './inbox/email-list';
 import { EmailViewer } from './inbox/email-viewer';
 import { DomainSelector } from './inbox/domain-selector';
 import { HistoryDropdown } from './inbox/history-dropdown';
+import { RequestDomainModal } from './inbox/request-domain-modal';
 import { Email, EmailAttachment } from './inbox/types';
 
 interface InboxInterfaceProps {
@@ -38,6 +39,7 @@ export function InboxInterface({ initialAddress, locale, retentionLabel }: Inbox
   const [history, setHistory] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showDomainMenu, setShowDomainMenu] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
   const [domainExpiration, setDomainExpiration] = useState<string | null>(null);
   const [domainStatusLoading, setDomainStatusLoading] = useState(false);
   const [filterQuery, setFilterQuery] = useState('');
@@ -528,7 +530,7 @@ export function InboxInterface({ initialAddress, locale, retentionLabel }: Inbox
             <div className="relative flex items-center shrink-0">
                  <span className="text-muted-foreground text-lg px-2">@</span>
             </div>
-            <div className="relative max-w-[250px] shrink-0">
+             <div className="relative max-w-[250px] shrink-0">
                  <DomainSelector
                     domains={systemDomains}
                     selectedDomain={domain}
@@ -544,7 +546,17 @@ export function InboxInterface({ initialAddress, locale, retentionLabel }: Inbox
                     showDomainMenu={showDomainMenu}
                     setShowDomainMenu={setShowDomainMenu}
                  />
-            </div>
+             </div>
+             <button
+               type="button"
+               onClick={() => setShowRequestModal(true)}
+               className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 h-12 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+               title="Request a new domain"
+             >
+               <Plus className="h-4 w-4" />
+               <span className="hidden sm:inline">Request domain</span>
+             </button>
+             {showRequestModal && <RequestDomainModal onClose={() => setShowRequestModal(false)} />}
             <HistoryDropdown
                 history={history}
                 activeAddress={address}

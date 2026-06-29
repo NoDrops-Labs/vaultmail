@@ -1,8 +1,6 @@
 import { storage } from '@/lib/storage';
 import { DOMAINS_SETTINGS_KEY, DOMAINS_CONFIG_SETTINGS_KEY } from '@/lib/admin-auth';
 import {
-  expandDomains,
-  isDomainInConfig,
   type MasterDomainConfig,
 } from '@/lib/domain-config';
 
@@ -66,20 +64,35 @@ export const getMasterDomains = async (): Promise<MasterDomainConfig[]> => {
 };
 
 export const getDomains = async (): Promise<string[]> => {
-  const config = await getMasterDomains();
-  if (config.length > 0) {
-    return expandDomains(config);
+  const [config, flatDomains] = await Promise.all([
+    getMasterDomains(),
+    getStoredDomains(),
+  ]);
+
+  const active = new Set<string>();
+  const configDomains = new Set<string>();
+
+  for (const entry of config) {
+    configDomains.add(entry.domain.toLowerCase().trim());
+    if (entry.enabled !== false) {
+      const subs = entry.subdomains.map((label) => `${label}.${entry.domain}`);
+      const all = entry.allowRoot ? [entry.domain, ...subs] : subs;
+      for (const d of all) active.add(d.toLowerCase().trim());
+    }
   }
-  return getStoredDomains();
+
+  for (const domain of flatDomains) {
+    if (!configDomains.has(domain.toLowerCase().trim())) {
+      active.add(domain.toLowerCase().trim());
+    }
+  }
+
+  return [...active];
 };
 
 export const isAddressSupported = async (email: string): Promise<boolean> => {
   const domain = email.split('@').pop();
   if (!domain) return false;
-  const config = await getMasterDomains();
-  if (config.length === 0) {
-    const flat = await getStoredDomains();
-    return flat.includes(domain.toLowerCase().trim());
-  }
-  return isDomainInConfig(domain, config);
+  const allDomains = await getDomains();
+  return allDomains.includes(domain.toLowerCase().trim());
 };

@@ -3,10 +3,12 @@ export type MasterDomainConfig = {
   domain: string;
   allowRoot: boolean;
   subdomains: string[];
+  enabled?: boolean;
 };
 
 export const expandDomains = (config: MasterDomainConfig[]): string[] =>
   config.flatMap((entry) => {
+    if (entry.enabled === false) return [];
     const subs = entry.subdomains.map((label) => `${label}.${entry.domain}`);
     return entry.allowRoot ? [entry.domain, ...subs] : subs;
   });
