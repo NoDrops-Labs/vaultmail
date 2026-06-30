@@ -3,10 +3,13 @@ import { z } from 'zod';
 import { checkApiRateLimit } from '@/lib/api-key-middleware';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { hashIp, getRequestIp } from '@/lib/ip-hash';
-import { createDomainRequest } from '@/lib/domain-requests';
+import { createDomainRequest, updateDomainRequest, getDomainRequest } from '@/lib/domain-requests';
 import { sendTelegramMessage } from '@/lib/telegram';
 import { storage } from '@/lib/storage';
 import { withPrefix } from '@/lib/storage-keys';
+import { getAutoApproveEnabled } from '@/lib/domain-auto-approve';
+import { isCloudflareConfigured } from '@/lib/cloudflare-zones';
+import { startOnboarding, getOnboarding } from '@/lib/domain-onboarding';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,24 +66,99 @@ export async function POST(req: Request) {
       turnstileOk
     );
 
-    if (created) {
-      const message = [
-        `🔔 New Domain Request (${request.type === 'add' ? 'Add' : 'Remove'})`,
-        `Domain: ${request.domain}`,
-        `Requested: ${new Date(request.requestedAt).toLocaleString()}`,
-        `ID: ${request.id}`,
-      ].join('\n');
-      await sendTelegramMessage(message);
+    if (parsed.data.type === 'remove') {
+      if (created) {
+        await sendTelegramMessage(`🔔 New Domain Removal Request\nDomain: ${request.domain}\nID: ${request.id}`);
+      }
+      return NextResponse.json({
+        token: request.id,
+        domain: request.domain,
+        status: 'pending',
+        nameservers: null,
+        autoApproved: false,
+      });
     }
 
-    const nameservers = process.env.NEXT_PUBLIC_CLOUDFLARE_ACCOUNT_NAMESERVERS;
-    return NextResponse.json({
-      success: true,
-      alreadyExists: !created,
-      nameservers: nameservers
-        ? nameservers.split(',').map((ns) => ns.trim()).filter(Boolean)
-        : null,
-    });
+    const autoApprove = await getAutoApproveEnabled();
+
+    if (!autoApprove || !isCloudflareConfigured()) {
+      if (created) {
+        await sendTelegramMessage(`🔔 New Domain Request (Add)\nDomain: ${request.domain}\nID: ${request.id}`);
+      }
+      return NextResponse.json({
+        token: request.id,
+        domain: request.domain,
+        status: 'pending',
+        nameservers: null,
+        autoApproved: false,
+      });
+    }
+
+    const existingOnboarding = await getOnboarding(request.domain);
+    if (existingOnboarding?.source === 'admin') {
+      return NextResponse.json({
+        token: request.id,
+        domain: request.domain,
+        status: 'pending',
+        nameservers: null,
+        autoApproved: false,
+      });
+    }
+
+    if (!created) {
+      const existing = await getDomainRequest(request.id);
+      if (existing?.status === 'approved') {
+        return NextResponse.json({
+          token: request.id,
+          domain: request.domain,
+          status: 'approved',
+          nameservers: existingOnboarding?.nameservers ?? null,
+          autoApproved: true,
+        });
+      }
+    }
+
+    try {
+      const record = await startOnboarding(request.domain, { source: 'user-request' });
+      if (record.step === 'failed_retryable' || record.step === 'failed_terminal') {
+        await updateDomainRequest(request.id, {
+          onboardingStatus: 'failed',
+          onboardingError: record.error?.message || 'Onboarding failed',
+        });
+        return NextResponse.json({
+          token: request.id,
+          domain: request.domain,
+          status: 'failed',
+          nameservers: null,
+          autoApproved: true,
+        });
+      }
+      await updateDomainRequest(request.id, {
+        status: 'approved',
+        onboardingStatus: 'started',
+      });
+
+      return NextResponse.json({
+        token: request.id,
+        domain: request.domain,
+        status: 'approved',
+        nameservers: record.nameservers ?? null,
+        autoApproved: true,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Onboarding failed';
+      await updateDomainRequest(request.id, {
+        onboardingStatus: 'failed',
+        onboardingError: message,
+      });
+      return NextResponse.json({
+        token: request.id,
+        domain: request.domain,
+        status: 'failed',
+        nameservers: null,
+        autoApproved: true,
+      });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 400 });

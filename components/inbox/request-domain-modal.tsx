@@ -1,26 +1,75 @@
 'use client';
 
 import { createPortal } from 'react-dom';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { X, Cloud, Server, CircleCheck, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { X, Cloud, Server, CircleCheck, Loader2, Copy } from 'lucide-react';
 import { TurnstileWidget } from '@/components/turnstile-widget';
 import { apiFetch } from '@/lib/client/api-fetch';
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+const STORAGE_KEY = 'domainRequestTokens';
+
+type StoredRequest = {
+  token: string;
+  domain: string;
+  requestedAt: string;
+  lastKnownStatus: string;
+};
+
+type StatusResult = {
+  status: 'pending' | 'approved' | 'rejected' | 'failed' | 'expired';
+  domain: string;
+  requestedAt: string;
+  updatedAt?: string;
+  nameservers?: string[];
+  zoneStatus?: string;
+  message?: string;
+};
 
 interface RequestDomainModalProps {
   onClose: () => void;
-  nameservers?: string[];
 }
 
-export function RequestDomainModal({ onClose, nameservers }: RequestDomainModalProps) {
+const readStoredRequests = (): StoredRequest[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is StoredRequest =>
+        item &&
+        typeof item.token === 'string' &&
+        typeof item.domain === 'string' &&
+        typeof item.requestedAt === 'string' &&
+        typeof item.lastKnownStatus === 'string'
+      )
+      .slice(0, 10);
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+    return [];
+  }
+};
+
+const saveStoredRequests = (items: StoredRequest[]) => {
+  const deduped = Array.from(new Map(items.map((item) => [item.token, item])).values())
+    .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))
+    .slice(0, 10);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(deduped));
+  return deduped;
+};
+
+export function RequestDomainModal({ onClose }: RequestDomainModalProps) {
+  const [tab, setTab] = useState<'request' | 'status'>('request');
   const [domain, setDomain] = useState('');
   const [requestType, setRequestType] = useState<'add' | 'remove'>('add');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ nameservers: string[] | null; alreadyExists: boolean } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [storedRequests, setStoredRequests] = useState<StoredRequest[]>(() => readStoredRequests());
+  const [tokenInput, setTokenInput] = useState(() => readStoredRequests()[0]?.token ?? '');
+  const [statusResult, setStatusResult] = useState<StatusResult | null>(null);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -29,6 +78,55 @@ export function RequestDomainModal({ onClose, nameservers }: RequestDomainModalP
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
   }, [onClose]);
+
+  const selectedStored = useMemo(
+    () => storedRequests.find((item) => item.token === tokenInput),
+    [storedRequests, tokenInput]
+  );
+
+  const rememberRequest = useCallback((item: StoredRequest) => {
+    const next = saveStoredRequests([item, ...storedRequests]);
+    setStoredRequests(next);
+  }, [storedRequests]);
+
+  const removeStoredToken = useCallback((token: string) => {
+    const next = saveStoredRequests(storedRequests.filter((item) => item.token !== token));
+    setStoredRequests(next);
+    if (tokenInput === token) setTokenInput(next[0]?.token ?? '');
+  }, [storedRequests, tokenInput]);
+
+  const checkStatus = useCallback(async (token = tokenInput) => {
+    const value = token.trim();
+    if (!value) return;
+    setChecking(true);
+    try {
+      const res = await apiFetch(`/api/domain-requests/status?token=${encodeURIComponent(value)}`);
+      if (res.status === 404) {
+        removeStoredToken(value);
+        setStatusResult(null);
+        toast.error('Request not found. Removed from recent requests.');
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to check status');
+      setStatusResult(data);
+      if (selectedStored) {
+        rememberRequest({ ...selectedStored, lastKnownStatus: data.status });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to check status');
+    } finally {
+      setChecking(false);
+    }
+  }, [removeStoredToken, rememberRequest, selectedStored, tokenInput]);
+
+  useEffect(() => {
+    if (!statusResult || statusResult.status !== 'pending') return;
+    const timer = setInterval(() => {
+      void checkStatus(tokenInput);
+    }, 25_000);
+    return () => clearInterval(timer);
+  }, [statusResult, tokenInput, checkStatus]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,21 +140,31 @@ export function RequestDomainModal({ onClose, nameservers }: RequestDomainModalP
       const res = await apiFetch('/api/domain-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          domain: domain.trim(),
-          type: requestType,
-          turnstileToken,
-        }),
+        body: JSON.stringify({ domain: domain.trim(), type: requestType, turnstileToken }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to submit request');
-      setResult({
-        nameservers: data.nameservers || nameservers || null,
-        alreadyExists: data.alreadyExists || false,
+      const item: StoredRequest = {
+        token: data.token,
+        domain: data.domain,
+        requestedAt: new Date().toISOString(),
+        lastKnownStatus: data.status,
+      };
+      rememberRequest(item);
+      setTokenInput(data.token);
+      setStatusResult({
+        status: data.status,
+        domain: data.domain,
+        requestedAt: item.requestedAt,
+        nameservers: data.nameservers ?? undefined,
+        message: data.autoApproved
+          ? 'Your domain was approved. Update your nameservers to continue.'
+          : 'Your request is waiting for review.',
       });
+      setTab('status');
       setDomain('');
       setTurnstileToken('');
-      toast.success(data.alreadyExists ? 'Request already exists' : 'Request submitted');
+      toast.success(data.autoApproved ? 'Request approved automatically' : 'Request submitted');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to submit');
     } finally {
@@ -64,159 +172,193 @@ export function RequestDomainModal({ onClose, nameservers }: RequestDomainModalP
     }
   };
 
+  const copyText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error('Failed to copy');
+    }
+  };
+
   if (typeof document === 'undefined') return null;
 
-  const displayNameservers = result?.nameservers || nameservers;
-
   return createPortal(
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div
         className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/95 backdrop-blur-xl p-4 md:p-6 text-white shadow-xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base md:text-lg font-semibold">Request a New Domain</h3>
+          <h3 className="text-base md:text-lg font-semibold">Domain Requests</h3>
           <button onClick={onClose} className="text-white/40 hover:text-white">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {result ? (
-          <div className="space-y-4">
-            <p className="text-sm text-white/70">
-              {result.alreadyExists
-                ? 'A request for this domain already exists. The admin will review it soon.'
-                : 'Your request has been submitted! The admin will review it and start Cloudflare onboarding.'}
-            </p>
+        <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-black/30 p-1">
+          <button
+            type="button"
+            onClick={() => setTab('request')}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${tab === 'request' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'}`}
+          >
+            Request Domain
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('status')}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${tab === 'status' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'}`}
+          >
+            Check Status
+          </button>
+        </div>
 
-            {displayNameservers && displayNameservers.length > 0 && (
+        {tab === 'request' ? (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <p className="text-xs md:text-sm text-white/70">
+              Submit a user-owned domain for Vaultmail. If auto-approval is enabled, nameservers appear immediately.
+            </p>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-widest text-white/50">Domain</label>
+              <input
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder="example.com"
+                className="mt-1 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-white/20"
+              />
+            </div>
+            <div className="flex gap-2">
+              {(['add', 'remove'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setRequestType(type)}
+                  className={`flex-1 rounded-md border px-3 py-1.5 text-xs ${requestType === type ? 'border-white/20 bg-white/10 text-white' : 'border-white/10 bg-black/30 text-white/60'}`}
+                >
+                  {type === 'add' ? 'Add Domain' : 'Remove Domain'}
+                </button>
+              ))}
+            </div>
+            {TURNSTILE_SITE_KEY && (
+              <div className="flex justify-center">
+                <TurnstileWidget
+                  siteKey={TURNSTILE_SITE_KEY}
+                  action="domain-request"
+                  onVerify={(token) => setTurnstileToken(token)}
+                  onExpire={() => setTurnstileToken('')}
+                />
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={submitting || !domain.trim()}
+              className="w-full rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-50"
+            >
+              {submitting ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : 'Submit Request'}
+            </button>
+          </form>
+        ) : (
+          <div className="space-y-4">
+            {storedRequests.length > 0 && (
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
-                  Cloudflare Nameservers
-                </p>
-                <p className="text-[11px] text-white/50 mb-2">
-                  Set these at your registrar once the admin approves your domain.
-                </p>
-                <div className="flex flex-col gap-1">
-                  {displayNameservers.map((ns) => (
-                    <code key={ns} className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[11px] text-white/70">
-                      {ns}
-                    </code>
+                <label className="text-[11px] font-semibold uppercase tracking-widest text-white/50">Recent requests</label>
+                <select
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white/20"
+                >
+                  {storedRequests.map((item) => (
+                    <option key={item.token} value={item.token}>
+                      {item.domain} — {item.lastKnownStatus}
+                    </option>
                   ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-widest text-white/50">Request ID</label>
+              <input
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                className="mt-1 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-white/20"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => checkStatus()}
+                disabled={checking || !tokenInput.trim()}
+                className="flex-1 rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-50"
+              >
+                {checking ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : 'Check Status'}
+              </button>
+              {storedRequests.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem(STORAGE_KEY);
+                    setStoredRequests([]);
+                    setTokenInput('');
+                    setStatusResult(null);
+                  }}
+                  className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/60 hover:bg-white/10 hover:text-white"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {statusResult && (
+              <div className="rounded-lg border border-white/10 bg-black/30 p-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="font-mono text-sm text-white">{statusResult.domain}</span>
+                  <span className="rounded border border-white/10 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-white/70">
+                    {statusResult.status}
+                  </span>
                 </div>
+                <p className="text-xs text-white/60">{statusResult.message}</p>
+                {statusResult.nameservers && statusResult.nameservers.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest text-white/40">Nameservers</p>
+                    {statusResult.nameservers.map((ns) => (
+                      <div key={ns} className="flex items-center gap-2">
+                        <code className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[11px] text-white/70">{ns}</code>
+                        <button
+                          type="button"
+                          onClick={() => copyText(ns, 'Nameserver')}
+                          className="rounded border border-white/10 bg-black/40 p-1.5 hover:bg-white/10"
+                        >
+                          <Copy className="h-3.5 w-3.5 text-white/60" />
+                        </button>
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-yellow-300/70">
+                      Set these nameservers at your registrar. Don&apos;t add MX records manually — Cloudflare handles it.
+                    </p>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => copyText(tokenInput, 'Request ID')}
+                  className="mt-3 text-[10px] text-white/40 hover:text-white/70"
+                >
+                  Copy request ID
+                </button>
               </div>
             )}
 
-            <Button onClick={onClose} variant="secondary" size="sm" className="w-full">
-              Close
-            </Button>
-          </div>
-        ) : (
-          <>
-            <p className="text-xs md:text-sm text-white/70 mb-4">
-              Vaultmail domains must be connected through Cloudflare Email Routing. Submit a domain request and the admin will set it up.
-            </p>
-
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-widest text-white/50">
-                  Domain
-                </label>
-                <input
-                  value={domain}
-                  onChange={(e) => setDomain(e.target.value)}
-                  placeholder="example.com"
-                  className="mt-1 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-white/20"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-widest text-white/50">
-                  Request Type
-                </label>
-                <div className="mt-1 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRequestType('add')}
-                    className={`flex-1 rounded-md border px-3 py-1.5 text-xs ${
-                      requestType === 'add'
-                        ? 'border-green-500/30 bg-green-500/10 text-green-300'
-                        : 'border-white/10 bg-black/30 text-white/60'
-                    }`}
-                  >
-                    Add Domain
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRequestType('remove')}
-                    className={`flex-1 rounded-md border px-3 py-1.5 text-xs ${
-                      requestType === 'remove'
-                        ? 'border-orange-500/30 bg-orange-500/10 text-orange-300'
-                        : 'border-white/10 bg-black/30 text-white/60'
-                    }`}
-                  >
-                    Remove Domain
-                  </button>
-                </div>
-              </div>
-
-              {TURNSTILE_SITE_KEY && (
-                <div className="flex justify-center">
-                  <TurnstileWidget
-                    siteKey={TURNSTILE_SITE_KEY}
-                    action="domain-request"
-                    onVerify={(token) => setTurnstileToken(token)}
-                    onExpire={() => setTurnstileToken('')}
-                  />
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={submitting || !domain.trim()}
-                className="w-full rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-50"
-              >
-                {submitting ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : 'Submit Request'}
-              </button>
-            </form>
-
-            <div className="mt-4 border-t border-white/10 pt-3">
-              <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2">How it works</p>
+            <div className="border-t border-white/10 pt-3">
               <div className="space-y-2">
-                <div className="flex gap-2">
-                  <Cloud className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-white/50">Submit the domain name you want to use.</p>
-                </div>
-                <div className="flex gap-2">
-                  <Server className="h-3.5 w-3.5 text-purple-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-white/50">Admin starts Cloudflare onboarding — nameservers assigned.</p>
-                </div>
-                {displayNameservers && displayNameservers.length > 0 && (
-                  <div className="flex flex-col gap-1">
-                    {displayNameservers.map((ns) => (
-                      <code key={ns} className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white/60">
-                        {ns}
-                      </code>
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <CircleCheck className="h-3.5 w-3.5 text-green-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-white/50">Once NS active, domain appears in the dropdown automatically.</p>
-                </div>
+                <div className="flex gap-2"><Cloud className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5" /><p className="text-[11px] text-white/50">Submit your domain request.</p></div>
+                <div className="flex gap-2"><Server className="h-3.5 w-3.5 text-purple-400 shrink-0 mt-0.5" /><p className="text-[11px] text-white/50">Check this tab for approval and actual nameservers.</p></div>
+                <div className="flex gap-2"><CircleCheck className="h-3.5 w-3.5 text-green-400 shrink-0 mt-0.5" /><p className="text-[11px] text-white/50">Once nameservers are active, the domain appears in the dropdown.</p></div>
               </div>
-              <p className="mt-2 text-[10px] text-yellow-300/70">
-                Don&apos;t add MX records manually — Cloudflare handles it.
-              </p>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>,
     document.body
   );
 }
-

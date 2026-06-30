@@ -250,6 +250,10 @@ export async function syncOnboarding(domainInput: string): Promise<OnboardingRec
       record.cfStatus = zone.status;
       record.lastCheckedAt = nowIso();
 
+      if (zone.name_servers && zone.name_servers.length > 0) {
+        record.nameservers = zone.name_servers;
+      }
+
       if (TERMINAL_CF_STATUSES.has(zone.status)) {
         record.step = 'failed_terminal';
         record.error = {

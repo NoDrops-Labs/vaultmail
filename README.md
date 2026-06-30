@@ -23,7 +23,7 @@ Netlify app: POST /api/webhook
     - Validate recipient domain
     - Store in MongoDB (inbox:<address>)
     - Set TTL (configurable retention)
-    - Optional Telegram notification
+    - No Telegram forwarding of email content (privacy)
     ->
 User browses / -> InboxInterface polls GET /api/inbox -> displays emails
 ```
@@ -35,7 +35,7 @@ User browses / -> InboxInterface polls GET /api/inbox -> displays emails
 - Privacy-first: emails stored in MongoDB with auto-expiry (30 min to 1 week)
 - Custom domains: admin-configured, multi-subdomain support (root + subdomain pools)
 - Cloudflare domain onboarding: add domains via Cloudflare API from the admin UI (auto-configures nameservers, Email Routing, catch-all rule)
-- Domain request modal: public "Request domain" button on homepage with Turnstile-protected submission flow, nameserver display, and admin notification panel
+- Domain request modal: public "Request domain" button with Turnstile-protected submission, UUID status checks, actual Cloudflare nameserver display, optional auto-approve for add requests, and admin-reviewed removals
 - Telegram notifications: admin gets Telegram message on new domain request (no email notifications for privacy)
 - Real-time inbox: auto-refreshes every 10 seconds
 - 3-mode auth: API key (50 req/min), session (15 req/min), anonymous (rate-limited)

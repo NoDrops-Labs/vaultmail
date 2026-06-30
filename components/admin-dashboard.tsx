@@ -15,7 +15,6 @@ import {
   RetentionSettings,
   BrandingSettings,
   HomepageLockSettings,
-  DomainsSettings,
   AdminStats,
   ImapSettings,
   ApiKeyView
@@ -32,16 +31,12 @@ import { RetentionSection } from './admin/retention-section';
 import { ApiKeysSection } from './admin/api-keys-section';
 import { DonationSection } from './admin/donation-section';
 import { DomainRequestsSection } from './admin/domain-requests-section';
-
-const normalizeDomains = (domains: string[]) =>
-  [...new Set(domains.map((domain) => domain.toLowerCase().trim()).filter(Boolean))];
+import { DomainSettingsSection } from './admin/domain-settings-section';
 
 export function AdminDashboard() {
   const [telegramEnabled, setTelegramEnabled] = useState(false);
   const [botToken, setBotToken] = useState('');
   const [chatId, setChatId] = useState('');
-  const [availableDomains, setAvailableDomains] = useState<string[]>([]);
-  const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
   const [retentionSeconds, setRetentionSeconds] = useState(86400);
   const [telegramSaving, setTelegramSaving] = useState(false);
   const [retentionSaving, setRetentionSaving] = useState(false);
@@ -71,6 +66,8 @@ export function AdminDashboard() {
   const [donationAddress, setDonationAddress] = useState('');
   const [donationMessage, setDonationMessage] = useState('If this project helped you, consider supporting with a donation');
   const [donationSaving, setDonationSaving] = useState(false);
+  const [autoApprove, setAutoApprove] = useState(false);
+  const [autoApproveSaving, setAutoApproveSaving] = useState(false);
   const [apiKeys, setApiKeys] = useState<ApiKeyView[]>([]);
   const [locale, setLocale] = useState<'en' | 'id'>('en');
 
@@ -91,30 +88,30 @@ export function AdminDashboard() {
         telegramResponse,
         retentionResponse,
         brandingResponse,
-        domainsResponse,
         homepageLockResponse,
         imapResponse,
         apiKeysResponse,
-        donationResponse
+        donationResponse,
+        domainSettingsResponse
       ] = await Promise.all([
         apiFetch('/api/admin/telegram'),
         apiFetch('/api/admin/retention'),
         apiFetch('/api/admin/branding'),
-        apiFetch('/api/admin/domains'),
         apiFetch('/api/admin/homepage-lock'),
         apiFetch('/api/admin/imap'),
         apiFetch('/api/admin/api-keys'),
-        apiFetch('/api/admin/donation')
+        apiFetch('/api/admin/donation'),
+        apiFetch('/api/admin/domain-settings')
       ]);
       if (
         !telegramResponse.ok ||
         !retentionResponse.ok ||
         !brandingResponse.ok ||
-        !domainsResponse.ok ||
         !homepageLockResponse.ok ||
         !imapResponse.ok ||
         !apiKeysResponse.ok ||
-        !donationResponse.ok
+        !donationResponse.ok ||
+        !domainSettingsResponse.ok
       ) {
         throw new Error('Unauthorized or failed to load settings.');
       }
@@ -122,7 +119,6 @@ export function AdminDashboard() {
       const retentionData =
         (await retentionResponse.json()) as RetentionSettings;
       const brandingData = (await brandingResponse.json()) as BrandingSettings;
-      const domainsData = (await domainsResponse.json()) as DomainsSettings;
       const homepageLockData =
         (await homepageLockResponse.json()) as HomepageLockSettings;
       const imapData = (await imapResponse.json()) as ImapSettings;
@@ -134,17 +130,12 @@ export function AdminDashboard() {
         evmAddress: string;
         message: string;
       };
+      const domainSettingsData = (await domainSettingsResponse.json()) as {
+        enabled: boolean;
+      };
       setTelegramEnabled(Boolean(data.enabled));
       setBotToken(data.botToken || '');
       setChatId(data.chatId || '');
-      const incomingAvailable = normalizeDomains(domainsData?.domains || []);
-      const incomingAllowed = normalizeDomains(
-        Array.isArray(data.allowedDomains) ? data.allowedDomains : []
-      );
-      setAvailableDomains(incomingAvailable);
-      setAllowedDomains(
-        incomingAllowed.length > 0 ? incomingAllowed : incomingAvailable
-      );
       if (retentionData?.seconds) {
         setRetentionSeconds(retentionData.seconds);
       }
@@ -158,6 +149,7 @@ export function AdminDashboard() {
       setDonationEnabled(Boolean(donationData?.enabled));
       setDonationAddress(donationData?.evmAddress || '');
       setDonationMessage(donationData?.message || 'If this project helped you, consider supporting with a donation');
+      setAutoApprove(Boolean(domainSettingsData?.enabled));
     } catch (error) {
       console.error(error);
       toast.error('Failed to load admin settings.');
@@ -192,23 +184,18 @@ export function AdminDashboard() {
   const saveTelegramSettings = async () => {
     setTelegramSaving(true);
     try {
-      const filteredAllowed = allowedDomains.filter((domain) =>
-        availableDomains.includes(domain)
-      );
       const response = await apiFetch('/api/admin/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           enabled: telegramEnabled,
           botToken,
-          chatId,
-          allowedDomains: filteredAllowed
+          chatId
         })
       });
       if (!response.ok) {
         throw new Error('Failed to save Telegram settings');
       }
-      setAllowedDomains(filteredAllowed);
       toast.success('Telegram settings saved.');
     } catch (error) {
       console.error(error);
@@ -240,6 +227,26 @@ export function AdminDashboard() {
       toast.error(error instanceof Error ? error.message : 'Failed to save donation settings.');
     } finally {
       setDonationSaving(false);
+    }
+  };
+
+  const saveDomainSettings = async () => {
+    setAutoApproveSaving(true);
+    try {
+      const response = await apiFetch('/api/admin/domain-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: autoApprove })
+      });
+      if (!response.ok) {
+        throw new Error('Failed to save domain request settings');
+      }
+      toast.success('Domain request settings saved.');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to save domain request settings.');
+    } finally {
+      setAutoApproveSaving(false);
     }
   };
 
@@ -477,6 +484,13 @@ export function AdminDashboard() {
 
             <DomainRequestsSection onDomainAdded={loadSettings} />
 
+            <DomainSettingsSection
+              autoApprove={autoApprove}
+              setAutoApprove={setAutoApprove}
+              onSave={saveDomainSettings}
+              saving={autoApproveSaving}
+            />
+
             <CloudflareDomainsSection onDomainAdded={loadSettings} />
 
             <hr className="border-white/10 my-2" />
@@ -558,9 +572,6 @@ export function AdminDashboard() {
               setBotToken={setBotToken}
               chatId={chatId}
               setChatId={setChatId}
-              availableDomains={availableDomains}
-              allowedDomains={allowedDomains}
-              setAllowedDomains={setAllowedDomains}
               onSave={saveTelegramSettings}
               saving={telegramSaving}
             />

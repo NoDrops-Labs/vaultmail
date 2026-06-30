@@ -1,20 +1,13 @@
 import { storage } from '@/lib/storage';
 import { NextResponse } from 'next/server';
-import { extractEmail, getSenderInfo } from '@/lib/utils';
-import { RETENTION_SETTINGS_KEY, TELEGRAM_SETTINGS_KEY } from '@/lib/admin-auth';
+import { extractEmail } from '@/lib/utils';
+import { RETENTION_SETTINGS_KEY } from '@/lib/admin-auth';
 import { inboxKey } from '@/lib/storage-keys';
 import { validateWebhookSecret } from '@/lib/webhook-auth';
 import { authorizeWebhookRequest } from '@/lib/api-key-middleware';
 import { webhookJsonSchema } from '@/lib/schemas/webhook';
 import { isAddressSupported } from '@/lib/domains';
 import crypto from 'crypto';
-
-type TelegramSettings = {
-  enabled: boolean;
-  botToken: string;
-  chatId: string;
-  allowedDomains?: string[];
-};
 
 type RetentionSettings = {
   seconds: number;
@@ -70,74 +63,6 @@ const parseRetentionSettings = (value: unknown): RetentionSettings | null => {
     return value as RetentionSettings;
   }
   return null;
-};
-
-const parseSettings = (value: unknown): TelegramSettings | null => {
-  if (!value) return null;
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value) as TelegramSettings;
-    } catch {
-      return null;
-    }
-  }
-  if (typeof value === 'object') {
-    return value as TelegramSettings;
-  }
-  return null;
-};
-
-const sendTelegramNotification = async (payload: {
-  from: string;
-  to: string;
-  subject: string;
-  text: string;
-}) => {
-  const settingsRaw = await storage.get(TELEGRAM_SETTINGS_KEY);
-  const settings = parseSettings(settingsRaw);
-
-  if (!settings?.enabled || !settings.botToken || !settings.chatId) {
-    return;
-  }
-
-  if (Array.isArray(settings.allowedDomains)) {
-    if (settings.allowedDomains.length === 0) {
-      return;
-    }
-    const recipient = extractEmail(payload.to);
-    const domain = recipient?.split('@').pop()?.toLowerCase();
-    if (!domain || !settings.allowedDomains.includes(domain)) {
-      return;
-    }
-  }
-
-  const sender = getSenderInfo(payload.from);
-  const messageLines = [
-    '📬 New Inbox Message',
-    `From: ${sender.label}`,
-    `To: ${payload.to}`,
-    `Subject: ${payload.subject}`,
-    '',
-    payload.text
-  ];
-
-  const response = await fetch(
-    `https://api.telegram.org/bot${settings.botToken}/sendMessage`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: settings.chatId,
-        text: messageLines.join('\n').slice(0, 4000),
-        disable_web_page_preview: true
-      })
-    }
-  );
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    console.error('Telegram send failed:', response.status, errorBody);
-  }
 };
 
 const getRetentionSeconds = async () => {
@@ -246,13 +171,6 @@ export async function POST(req: Request) {
     
     // Set expiry based on global retention setting.
     await storage.expire(key, retention);
-
-    await sendTelegramNotification({
-      from,
-      to,
-      subject: subject || '(No Subject)',
-      text: text || ''
-    });
 
     return NextResponse.json({ success: true, id: emailId });
   } catch (error) {

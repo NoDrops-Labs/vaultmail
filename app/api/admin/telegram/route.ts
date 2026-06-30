@@ -68,8 +68,12 @@ export async function POST(request: Request) {
     );
   }
   const body = parsed.data;
+  const existing = parseSettings(await storage.get(TELEGRAM_SETTINGS_KEY));
   const enabled = body.enabled;
-  const botToken = body.botToken.trim();
+  const incomingBotToken = body.botToken.trim();
+  const botToken = incomingBotToken === '••••••••'
+    ? existing?.botToken || ''
+    : incomingBotToken;
   const chatId = body.chatId.trim();
   const allowedDomains = body.allowedDomains
     .map((domain) => domain.toLowerCase().trim())

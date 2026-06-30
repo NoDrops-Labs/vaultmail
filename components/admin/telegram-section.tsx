@@ -11,9 +11,6 @@ interface TelegramSectionProps {
   setBotToken: (v: string) => void;
   chatId: string;
   setChatId: (v: string) => void;
-  availableDomains: string[];
-  allowedDomains: string[];
-  setAllowedDomains: (v: string[] | ((prev: string[]) => string[])) => void;
   onSave: () => void;
   saving: boolean;
 }
@@ -25,9 +22,6 @@ export function TelegramSection({
   setBotToken,
   chatId,
   setChatId,
-  availableDomains,
-  allowedDomains,
-  setAllowedDomains,
   onSave,
   saving
 }: TelegramSectionProps) {
@@ -40,7 +34,7 @@ export function TelegramSection({
               Notification Status
             </h2>
             <p className="text-xs md:text-sm text-white/60">
-              Enable to send notifications to Telegram.
+              Enable Telegram notifications for domain requests.
             </p>
           </div>
           <Button
@@ -85,45 +79,6 @@ export function TelegramSection({
               placeholder="-100xxxxxxxxxx"
               className="mt-3 bg-black/30 text-white placeholder:text-white/40"
             />
-          </div>
-        </div>
-        <div className="mt-6">
-          <p className="text-xs font-semibold uppercase tracking-widest text-white/60">
-            Domains sent to Telegram
-          </p>
-          <p className="mt-2 text-xs text-white/50">
-            Select domains to forward to Telegram.
-          </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {availableDomains.length === 0 ? (
-              <p className="text-xs md:text-sm text-white/50">
-                Add domains first.
-              </p>
-            ) : (
-              availableDomains.map((domain) => {
-                const checked = allowedDomains.includes(domain);
-                return (
-                  <label
-                    key={domain}
-                    className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs md:text-sm text-white/80"
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-purple-400"
-                      checked={checked}
-                      onChange={() => {
-                        setAllowedDomains((prev) =>
-                          checked
-                            ? prev.filter((item) => item !== domain)
-                            : [...prev, domain]
-                        );
-                      }}
-                    />
-                    <span className="font-mono">{domain}</span>
-                  </label>
-                );
-              })
-            )}
           </div>
         </div>
         <p className="mt-4 text-xs text-white/50">

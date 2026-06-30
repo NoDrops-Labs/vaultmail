@@ -558,15 +558,8 @@ export function InboxInterface({ initialAddress, locale, retentionLabel, initial
                <Plus className="h-4 w-4" />
                <span className="hidden sm:inline">Request domain</span>
              </button>
-             {showRequestModal && (
-    <RequestDomainModal
-      onClose={() => setShowRequestModal(false)}
-      nameservers={
-        process.env.NEXT_PUBLIC_CLOUDFLARE_ACCOUNT_NAMESERVERS
-          ? process.env.NEXT_PUBLIC_CLOUDFLARE_ACCOUNT_NAMESERVERS.split(',').map((ns) => ns.trim()).filter(Boolean)
-          : undefined
-      }
-    />
+  {showRequestModal && (
+    <RequestDomainModal onClose={() => setShowRequestModal(false)} />
   )}
             <HistoryDropdown
                 history={history}

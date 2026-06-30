@@ -171,3 +171,102 @@ export const deleteDomainRequest = async (id: string): Promise<void> => {
   }
   await storage.del(requestKey(id));
 };
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const REQUEST_EXPIRY_DAYS = 30;
+
+export type PublicDomainRequestStatus = {
+  status: 'pending' | 'approved' | 'rejected' | 'failed' | 'expired';
+  domain: string;
+  requestedAt: string;
+  updatedAt?: string;
+  nameservers?: string[];
+  zoneStatus?: string;
+  message?: string;
+};
+
+export const getPublicDomainRequestStatus = async (token: string): Promise<PublicDomainRequestStatus | null> => {
+  if (!UUID_REGEX.test(token)) return null;
+
+  const request = await getDomainRequest(token);
+  if (!request) return null;
+
+  const ageMs = Date.now() - new Date(request.requestedAt).getTime();
+  const expiryMs = REQUEST_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+  if (ageMs > expiryMs) {
+    return {
+      status: 'expired',
+      domain: request.domain,
+      requestedAt: request.requestedAt,
+      message: 'This request is no longer available.',
+    };
+  }
+
+  if (request.onboardingStatus === 'failed') {
+    return {
+      status: 'failed',
+      domain: request.domain,
+      requestedAt: request.requestedAt,
+      updatedAt: request.updatedAt,
+      message: 'We could not complete setup. Please contact support.',
+    };
+  }
+
+  if (request.status === 'pending') {
+    return {
+      status: 'pending',
+      domain: request.domain,
+      requestedAt: request.requestedAt,
+      updatedAt: request.updatedAt,
+      message: 'Your request is waiting for review.',
+    };
+  }
+
+  if (request.status === 'rejected') {
+    return {
+      status: 'rejected',
+      domain: request.domain,
+      requestedAt: request.requestedAt,
+      updatedAt: request.updatedAt,
+      message: 'Your request was not approved.',
+    };
+  }
+
+  if (request.status === 'approved') {
+    let nameservers: string[] | undefined;
+    let zoneStatus: string | undefined;
+
+    const onboardingRaw = await storage.get(withPrefix(`domain:onboarding:${request.normalizedDomain}`));
+    if (onboardingRaw) {
+      let onboarding: unknown = onboardingRaw;
+      if (typeof onboardingRaw === 'string') {
+        try { onboarding = JSON.parse(onboardingRaw); } catch { onboarding = null; }
+      }
+      if (onboarding && typeof onboarding === 'object') {
+        const rec = onboarding as { nameservers?: string[] | null; cfStatus?: string | null; step?: string };
+        if (rec.nameservers && rec.nameservers.length > 0) nameservers = rec.nameservers;
+        if (rec.cfStatus) zoneStatus = rec.cfStatus;
+      }
+    }
+
+    return {
+      status: 'approved',
+      domain: request.domain,
+      requestedAt: request.requestedAt,
+      updatedAt: request.updatedAt,
+      nameservers,
+      zoneStatus,
+      message: nameservers && nameservers.length > 0
+        ? 'Your domain was approved. Update your nameservers to continue.'
+        : 'Your domain was approved. Nameservers will appear here once available.',
+    };
+  }
+
+  return {
+    status: 'pending',
+    domain: request.domain,
+    requestedAt: request.requestedAt,
+    updatedAt: request.updatedAt,
+    message: 'Your request is being processed.',
+  };
+};
