@@ -17,6 +17,7 @@ export type ApiKeyRequest = {
   updatedAt: string;
   adminNote?: string;
   keyHash?: string;
+  keyPlain?: string;
 };
 
 const REQUEST_PREFIX = withPrefix('api-key:request:');
@@ -149,7 +150,7 @@ export const listApiKeyRequests = async (status?: ApiKeyRequestStatus): Promise<
 
 export const updateApiKeyRequest = async (
   id: string,
-  updates: Partial<Pick<ApiKeyRequest, 'status' | 'adminNote' | 'keyHash'>>
+  updates: Partial<Pick<ApiKeyRequest, 'status' | 'adminNote' | 'keyHash' | 'keyPlain'>>
 ): Promise<ApiKeyRequest | null> => {
   const existing = await getApiKeyRequest(id);
   if (!existing) return null;
@@ -177,6 +178,7 @@ export type PublicApiKeyRequestStatus = {
   requestedAt: string;
   updatedAt?: string;
   message?: string;
+  key?: string;
 };
 
 export const getPublicApiKeyRequestStatus = async (
@@ -222,6 +224,9 @@ export const getPublicApiKeyRequestStatus = async (
     label: request.label,
     requestedAt: request.requestedAt,
     updatedAt: request.updatedAt,
-    message: 'Your request was approved. Contact the admin for your API key.',
+    message: request.keyPlain
+      ? 'Your request was approved. Copy your API key below.'
+      : 'Your request was approved. Contact the admin for your API key.',
+    key: request.keyPlain,
   };
 };

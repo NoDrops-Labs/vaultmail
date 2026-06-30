@@ -23,6 +23,7 @@ type StatusResult = {
   requestedAt: string;
   updatedAt?: string;
   message?: string;
+  key?: string;
 };
 
 interface RequestApiKeyModalProps {
@@ -335,6 +336,21 @@ export function RequestApiKeyModal({ onClose, t }: RequestApiKeyModalProps) {
                   </span>
                 </div>
                 <p className="text-xs text-white/60">{statusResult.message}</p>
+                {statusResult.status === 'approved' && statusResult.key && (
+                  <div className="mt-3 rounded-md border border-green-500/30 bg-green-500/10 p-2">
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-green-300">
+                      Your API Key
+                    </div>
+                    <div className="break-all font-mono text-xs text-white">{statusResult.key}</div>
+                    <button
+                      type="button"
+                      onClick={() => copyText(statusResult.key as string, 'API key')}
+                      className="mt-2 rounded border border-white/10 bg-white/10 px-2 py-1 text-[10px] text-white hover:bg-white/20"
+                    >
+                      Copy API Key
+                    </button>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => copyText(tokenInput, 'Request ID')}

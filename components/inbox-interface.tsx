@@ -513,11 +513,11 @@ export function InboxInterface({ initialAddress, locale, retentionLabel, initial
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 md:gap-2">
+        <div className="flex flex-col gap-2">
           {/* Email Address Section */}
           <div className="flex items-center gap-1 md:gap-2 w-full">
             <div className="relative flex-1 min-w-0">
-              <Input 
+              <Input
                       value={address.split('@')[0] || ''}
                       onChange={(e) => {
                           const val = e.target.value.replace(/[^a-zA-Z0-9._-]/g, '');
@@ -533,7 +533,7 @@ export function InboxInterface({ initialAddress, locale, retentionLabel, initial
             <div className="relative flex items-center shrink-0">
                  <span className="text-muted-foreground text-sm md:text-lg px-0.5 md:px-2">@</span>
             </div>
-             <div className="relative flex-1 min-w-0 max-w-[50%] md:max-w-[250px] shrink-0">
+             <div className="relative min-w-0 flex-1 md:flex-none md:w-64 lg:w-72">
                  <DomainSelector
                     domains={systemDomains}
                     selectedDomain={domain}

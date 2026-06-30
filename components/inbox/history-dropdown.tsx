@@ -76,7 +76,7 @@ export function HistoryDropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.96 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-1/2 z-[70] mt-2 w-80 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-2xl overflow-hidden md:left-auto md:right-0 md:translate-x-0"
+            className="absolute right-0 z-[70] mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-2xl overflow-hidden max-md:left-1/2 max-md:right-auto max-md:w-72 max-md:-translate-x-1/2 max-md:text-xs"
           >
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
               <span className="text-xs font-bold tracking-wider uppercase text-white/50">{t.historyTitle}</span>
@@ -101,7 +101,7 @@ export function HistoryDropdown({
                 history.map((histAddr) => (
                   <div key={histAddr} className="flex group items-center gap-3 rounded-lg border border-transparent hover:border-white/10">
                     <button type="button" className="flex-1 min-w-0 rounded-lg p-3 text-left transition-colors hover:bg-white/5" onClick={() => onRestore(histAddr)}>
-                      <p className="font-mono text-sm truncate text-gray-200">{histAddr}</p>
+                      <p className="font-mono text-xs md:text-sm truncate text-gray-200">{histAddr}</p>
                       <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--accent, #c4b5fd)' }}>
                         {hasEmails && activeAddress === histAddr ? t.historyActive : t.historyRestore}
                       </p>

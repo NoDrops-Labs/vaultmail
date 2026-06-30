@@ -16,5 +16,11 @@ export async function GET(req: Request) {
   const status = url.searchParams.get('status') as ApiKeyRequestStatus | null;
 
   const requests = await listApiKeyRequests(status ?? undefined);
-  return NextResponse.json({ requests });
+  const sanitized = requests.map((request) => {
+    const { keyPlain, requesterIpHash, ...rest } = request;
+    void keyPlain;
+    void requesterIpHash;
+    return rest;
+  });
+  return NextResponse.json({ requests: sanitized });
 }

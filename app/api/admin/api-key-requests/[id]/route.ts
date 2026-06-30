@@ -111,6 +111,7 @@ export async function PATCH(
         const updated = await updateApiKeyRequest(id, {
           status: 'approved',
           keyHash,
+          keyPlain: plainKey,
           adminNote,
         });
         return NextResponse.json({ request: updated, apiKey: plainKey }, { status: 200 });

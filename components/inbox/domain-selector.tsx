@@ -45,13 +45,9 @@ export function DomainSelector({
     };
   }, [showDomainMenu, setShowDomainMenu]);
 
-  const longestDomain = domains.reduce((max, d) => d.length > max.length ? d : max, selectedDomain);
-  const calculatedMinWidth = Math.min(Math.max(longestDomain.length * 7.2 + 40, 160), 280);
-
   return (
     <div
-      className="relative shrink-0 w-full md:w-auto"
-      style={{ minWidth: `clamp(10rem, ${calculatedMinWidth}px, calc(100vw - 2rem))` }}
+      className="relative shrink-0 w-full md:w-auto min-w-0"
       ref={containerRef}
     >
       <Button
@@ -74,7 +70,7 @@ export function DomainSelector({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.98 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-0 z-[70] mt-2 w-full rounded-xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-2xl overflow-hidden"
+            className="absolute left-0 z-[70] mt-2 w-full rounded-xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-2xl overflow-hidden max-md:left-1/2 max-md:w-max max-md:min-w-[180px] max-md:max-w-[calc(100vw-2rem)] max-md:-translate-x-1/2"
           >
             <div className="max-h-60 overflow-y-auto custom-scrollbar p-2 space-y-1">
               {domains.map((d) => (
@@ -83,7 +79,7 @@ export function DomainSelector({
                   type="button"
                   onClick={() => onSelectDomain(d)}
                   className={cn(
-                    "w-full text-left px-3 py-2 rounded-lg font-mono text-sm transition-colors truncate",
+                    "w-full text-left px-3 py-1.5 rounded-lg font-mono text-xs transition-colors truncate",
                     d === selectedDomain ? "bg-white/15 text-white" : "text-gray-200 hover:bg-white/10"
                   )}
                 >
